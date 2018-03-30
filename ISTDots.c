@@ -21,6 +21,7 @@
 #define MAX_BOARD_POS 15      // maximum size of the board
 #define MAX_COLORS 5
 #define MARGIN 5
+#define CROSSING_POINT 501    // adress of current_selected[][] in wich is saved point were the square is closed
 
 // declaration of the functions related to graphical issues
 void InitEverything(int , int , TTF_Font **, SDL_Surface **, SDL_Window ** , SDL_Renderer ** );
@@ -47,6 +48,7 @@ void MovePoints(int [][MAX_BOARD_POS], int [TABLE_SIZE][3], int , int , int, int
 void FreshNewPoints(int [][MAX_BOARD_POS], int , int,int);
 void CleanC_S(int[][3], int);
 void SinalizePointsToBeDeleted(int [][MAX_BOARD_POS], int [TABLE_SIZE][3], int , int, int, int );
+void ProbabilisticPosDetermination(int [][MAX_BOARD_POS], int, int);
 
 void HidePointsToBeRemoved(int [], int, SDL_Renderer *,int [][MAX_BOARD_POS], int, int);
 void RenderPath(SDL_Renderer *, int, int[TABLE_SIZE][3],int, int []);
@@ -75,9 +77,9 @@ int main( void ){
     int pt_x = 0, pt_y = 0;
     char player_name[30]= "anon0001\0";
     int ncolors=MAX_COLORS, n_moves=100;
-    int current_selected[TABLE_SIZE][3], pressed=0,num_selected=0;
-    int state=0;
-    int flag_square=0;
+    int current_selected[TABLE_SIZE][3], pressed=0,num_selected=0; //(in order)coordinates and color of dots selected , state of the mouse button, number of dots selected
+    int state=0; // TO be REVIEWWWWWWWWWWWWWWWEDDDDDDDDDDDDD
+    int flag_square=0; //1 if a square is done
 
     // initialize graphics
     InitEverything(width, height, &serif, imgs, &window, &renderer);
@@ -117,13 +119,6 @@ int main( void ){
             else if ( event.type == SDL_MOUSEBUTTONUP ){
                 ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y, board_pos_x, board_pos_y);
                 printf("Button up: %d %d\n", pt_x, pt_y);
-                for(int i=0; i<num_selected;i++){
-                               printf("[" );
-                               for(int j=0;j<3;j++){
-                                   printf("%d;", current_selected[i][j] );
-                               }
-                               printf("]\n");
-                           }
                 state=1;
                 pressed=0;
             }
@@ -144,10 +139,13 @@ int main( void ){
         if (state==1) {
             //RemovePoints(board_size_px, square_size_px, renderer,num_selected, current_selected);
             state=2;
+            //Set points selected to -1. if a square is made sets the points of the square to -2 and all others of the same color to -1
             SinalizePointsToBeDeleted(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square);
+            //paints the dots about to be removed with the background color
             HidePointsToBeRemoved(board_size_px, square_size_px, renderer,board, board_pos_x, board_pos_y);
+            //simulates gravity
             MovePoints(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square);
-            printf("mainbeforesetedtozero%d", num_selected);
+
             num_selected=0;
             FreshNewPoints(board, board_pos_x,board_pos_y, ncolors);
         }
@@ -619,6 +617,7 @@ int YNconnect(int *ptrnum_selected, int current_selected[TABLE_SIZE][3], int boa
     //verifica se são consecutivos e garante que não interefere com o fundo
     if ((current_selected[*ptrnum_selected-2][0]==_pt_x)&&(current_selected[*ptrnum_selected-2][1]==_pt_y)){
         *ptrnum_selected=*ptrnum_selected-2;
+        if (*ptrnum_selected<0) *ptrnum_selected=1;
         printf("yn%d", *ptrnum_selected);
         *ptrflag_square=0;
         printf("%d", *ptrflag_square );
@@ -629,6 +628,7 @@ int YNconnect(int *ptrnum_selected, int current_selected[TABLE_SIZE][3], int boa
 
     for (int i=0; i<*ptrnum_selected;i++){
         if (((current_selected[i][0]==_pt_x)&&(current_selected[i][1]==_pt_y))&&((*ptrnum_selected-1)!=i)){
+            current_selected[CROSSING_POINT][0]=i;
             *ptrflag_square=1;
             break;
         }
@@ -683,7 +683,7 @@ void HidePointsToBeRemoved (int board_size_px[], int _square_size_px, SDL_Render
 
     for(int j=0;j<_board_pos_x;j++){
         for(int k=_board_pos_y-1; k>=0;k--){
-            if(board[j][k]==-1){
+            if(board[j][k]<0){
                 coord_x = DotToCoordinate(0, board_size_px, _square_size_px,j);
                 coord_y = DotToCoordinate(1, board_size_px, _square_size_px,k);
                 circleR = (int)(_square_size_px*0.4f);
@@ -712,22 +712,15 @@ int DotToCoordinate(int  X0Y1,  int board_size_px[], int _square_size_px, int IN
 }
 
 void SinalizePointsToBeDeleted(int board[][MAX_BOARD_POS], int current_selected[TABLE_SIZE][3], int _num_selected, int _board_pos_x, int _board_pos_y, int flag_square){
-    int coord_x, coord_y;
+    int marker=-1;
 
     if (_num_selected==1) return;
 
     for(int i=0; i<_num_selected;i++){
-        coord_x=current_selected[i][0];
-        coord_y=current_selected[i][1];
-        board[coord_x][coord_y]=-1;
-    }
 
-    if(flag_square==1){
-        for(int j=0;j<_board_pos_x;j++){
-            for(int k=_board_pos_y; k>=0;k--){
-                if(board[j][k]==current_selected[0][2]) board[j][k]=-1;
-            }
-        }
+        if(i>=current_selected[CROSSING_POINT][0]) marker=-2;
+
+        board[current_selected[i][0]][current_selected[i][1]]=marker;
     }
 
 }
@@ -735,14 +728,14 @@ void SinalizePointsToBeDeleted(int board[][MAX_BOARD_POS], int current_selected[
 void MovePoints(int board[][MAX_BOARD_POS], int current_selected[TABLE_SIZE][3], int _num_selected, int _board_pos_x, int _board_pos_y, int flag_square){
     int l=0;
 
-    if (_num_selected==1) return;
+    if (_num_selected==1) return; //se só houver um número
 
     for(int j=0;j<_board_pos_x;j++){
         for(int k=_board_pos_y; k>=0;k--){
-            if (board[j][k]==-1){
+            if (board[j][k]<0){
                 l=k-1;
                 while (l>=0){
-                    if (board[j][l]!=-1){
+                    if (board[j][l]>-1){
                         board[j][k]=board[j][l];
                         board[j][l]=-1;
                         break;
@@ -754,13 +747,8 @@ void MovePoints(int board[][MAX_BOARD_POS], int current_selected[TABLE_SIZE][3],
         }
     }
 
-    for(int i=0; i<_board_pos_y; i++){
-                       for(int j=0; j<_board_pos_x; j++){
-                           printf("[%d] ", board[j][i]);
-                       }
-                       printf("\n");
-                   }
-
+    //após sevir o seu propósito reinicia-se para um valor grande o suficiente para nao afetar futuras jogadas
+    current_selected[CROSSING_POINT][0]=1000;
 
 }
 
@@ -768,14 +756,14 @@ void FreshNewPoints(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos
     srand(time(NULL));
     for(int i=0; i<_board_pos_x;i++){
         for(int j=0; j<_board_pos_y;j++){
-            if (board[i][j]==-1) board[i][j]=(rand()%ncolors);
+            if (board[i][j]<0) board[i][j]=(rand()%ncolors);
         }
     }
 }
 
 void CleanC_S(int current_selected[][3] , int num_selected){
 
-    for(int i=TABLE_SIZE-1;i>num_selected;i--){
+    for(int i=CROSSING_POINT-1;i>num_selected;i--){
         for(int j=0; j<3; j++){
             current_selected[i][j]=-1;
         }
