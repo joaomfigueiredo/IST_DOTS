@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include<math.h>
 //for xor operand
 #include<iso646.h>
 
@@ -30,7 +31,7 @@ SDL_Renderer* CreateRenderer(int , int , SDL_Window *);
 int RenderText(int, int, const char *, TTF_Font *, SDL_Color *, SDL_Renderer *);
 int RenderLogo(int, int, SDL_Surface *, SDL_Renderer *);
 int RenderTable(int, int, int [], TTF_Font *, SDL_Surface **, SDL_Renderer *);
-void ProcessMouseEvent(int , int , int [], int , int *, int * );
+void ProcessMouseEvent(int , int , int [], int , int *, int *, int, int );
 void RenderPoints(int [][MAX_BOARD_POS], int, int, int [], int, SDL_Renderer *);
 void RenderStats( SDL_Renderer *, TTF_Font *, int [], int , int );
 void filledCircleRGBA(SDL_Renderer * , int , int , int , int , int , int );
@@ -64,7 +65,7 @@ int main( void ){
     TTF_Font *serif = NULL;
     SDL_Surface *imgs[2];
     SDL_Event event;
-    int delay = 10;
+    int delay = 300;
     int quit = 0;
     int width = (TABLE_SIZE + LEFT_BAR_SIZE);
     int height = TABLE_SIZE;
@@ -95,7 +96,6 @@ int main( void ){
             else if ( event.type == SDL_KEYDOWN ){
                 switch ( event.key.keysym.sym ){
                     case SDLK_n:
-
                         InitialBoard(board, board_pos_x, board_pos_y, ncolors);
                         break;
                     case SDLK_q:
@@ -108,14 +108,14 @@ int main( void ){
             }
 
             else if ( event.type == SDL_MOUSEBUTTONDOWN ){
-                ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y);
+                ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y, board_pos_x, board_pos_y);
                 printf("Button down: %d %d\n", pt_x, pt_y);
                 pressed=1;
                 CurrentMove(pt_x, pt_y,current_selected,board,&num_selected, &flag_square);
             }
 
             else if ( event.type == SDL_MOUSEBUTTONUP ){
-                ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y);
+                ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y, board_pos_x, board_pos_y);
                 printf("Button up: %d %d\n", pt_x, pt_y);
                 for(int i=0; i<num_selected;i++){
                                printf("[" );
@@ -130,8 +130,8 @@ int main( void ){
 
             else if ( event.type == SDL_MOUSEMOTION ){
             //    printf("NUMEROCORES[%d]\n",ncolors );
-                ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y);
-                //printf("Moving Mouse: %d %d\n", pt_x, pt_y);
+                ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y,board_pos_x, board_pos_y);
+                printf("Moving Mouse: %d %d\n", pt_x, pt_y);
                 if (pressed==1) CurrentMove(pt_x, pt_y,current_selected, board, &num_selected, &flag_square);
 
             }
@@ -147,7 +147,6 @@ int main( void ){
             SinalizePointsToBeDeleted(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square);
             HidePointsToBeRemoved(board_size_px, square_size_px, renderer,board, board_pos_x, board_pos_y);
             MovePoints(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square);
-            SDL_Delay(3300);
             printf("mainbeforesetedtozero%d", num_selected);
             num_selected=0;
             FreshNewPoints(board, board_pos_x,board_pos_y, ncolors);
@@ -188,14 +187,14 @@ int main( void ){
  */
 
 void ProcessMouseEvent(int _mouse_pos_x, int _mouse_pos_y, int _board_size_px[], int _square_size_px,
-        int *_pt_x, int *_pt_y ){
+        int *_pt_x, int *_pt_y, int _board_pos_x, int _board_pos_y ){
     // corner of the board
     int x_corner = (TABLE_SIZE - _board_size_px[0]) >> 1;
     int y_corner = (TABLE_SIZE - _board_size_px[1] - 15);
 
     // verify if valid cordinates
-    if (_mouse_pos_x < x_corner || _mouse_pos_y < y_corner || _mouse_pos_x > (x_corner + _board_size_px[0])
-        || _mouse_pos_y > (y_corner + _board_size_px[1]) )
+    if (_mouse_pos_x < x_corner || _mouse_pos_y < y_corner || _mouse_pos_x > (x_corner + _board_size_px[0]-10)
+        || _mouse_pos_y > (y_corner + _board_size_px[1]-10) )
     {
         *_pt_x = -1;
         *_pt_y = -1;
@@ -206,8 +205,30 @@ void ProcessMouseEvent(int _mouse_pos_x, int _mouse_pos_y, int _board_size_px[],
     _mouse_pos_x = _mouse_pos_x - x_corner;
     _mouse_pos_y = _mouse_pos_y - y_corner;
 
-    *_pt_x = _mouse_pos_x / (_square_size_px + SQUARE_SEPARATOR);
-    *_pt_y = _mouse_pos_y / (_square_size_px + SQUARE_SEPARATOR);
+    //verifica se o rato esta contido nalgum dos circulos (se for o caso identifica as suas coordenadas ja processadas)
+    int CircRadius,centerCircX,centerCircY, distancetoPointCenter;
+
+    for ( int i = 0; i < _board_pos_x; i++ )
+    {
+        for ( int j = 0; j < _board_pos_y; j++ )
+        {
+                centerCircX = (i+1)*SQUARE_SEPARATOR + i*(_square_size_px)+(_square_size_px>>1);
+                centerCircY = (j+1)*SQUARE_SEPARATOR + j*(_square_size_px)+(_square_size_px>>1);
+                CircRadius = (int)(_square_size_px*0.4f);
+                distancetoPointCenter=sqrt(((centerCircX-_mouse_pos_x)*(centerCircX-_mouse_pos_x))+((centerCircY-_mouse_pos_y)*(centerCircY-_mouse_pos_y)));
+
+                if (distancetoPointCenter<=CircRadius){
+                    *_pt_x=i;
+                    *_pt_y=j;
+                    return;
+                }
+                else {
+                    *_pt_x = -1;
+                    *_pt_y = -1;
+                }
+        }
+    }
+
 }
 
 /**
@@ -588,11 +609,13 @@ void CurrentMove(int _pt_x,int _pt_y,int current_selected[TABLE_SIZE][3],int _bo
         printf("outrosincrementos%d", *ptrnum_selected);
         *ptrnum_selected=*ptrnum_selected+1;
     }
+
     else        ;
 }
 
 //verifica se deve ligar os pontos
 int YNconnect(int *ptrnum_selected, int current_selected[TABLE_SIZE][3], int board[][MAX_BOARD_POS], int _pt_x, int _pt_y, int *ptrflag_square){
+    if ((_pt_x)==-1) return 0;
     //verifica se são consecutivos e garante que não interefere com o fundo
     if ((current_selected[*ptrnum_selected-2][0]==_pt_x)&&(current_selected[*ptrnum_selected-2][1]==_pt_y)){
         *ptrnum_selected=*ptrnum_selected-2;
@@ -659,7 +682,7 @@ void HidePointsToBeRemoved (int board_size_px[], int _square_size_px, SDL_Render
     int circleR,coord_x,coord_y;
 
     for(int j=0;j<_board_pos_x;j++){
-        for(int k=_board_pos_y; k>=0;k--){
+        for(int k=_board_pos_y-1; k>=0;k--){
             if(board[j][k]==-1){
                 coord_x = DotToCoordinate(0, board_size_px, _square_size_px,j);
                 coord_y = DotToCoordinate(1, board_size_px, _square_size_px,k);
