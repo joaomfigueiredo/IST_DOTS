@@ -48,7 +48,7 @@ void MovePoints(int [][MAX_BOARD_POS], int [TABLE_SIZE][3], int , int , int, int
 void FreshNewPoints(int [][MAX_BOARD_POS], int , int,int);
 void CleanC_S(int[][3], int);
 void SinalizePointsToBeDeleted(int [][MAX_BOARD_POS], int [TABLE_SIZE][3], int , int, int, int );
-void ProbabilisticPosDetermination(int [][MAX_BOARD_POS], int, int);
+void RadialDotCheck(int [][MAX_BOARD_POS], int, int);
 
 void HidePointsToBeRemoved(int [], int, SDL_Renderer *,int [][MAX_BOARD_POS], int, int, int [TABLE_SIZE][3]);
 void RenderPath(SDL_Renderer *, int, int[TABLE_SIZE][3],int, int []);
@@ -740,7 +740,7 @@ void SinalizePointsToBeDeleted(int board[][MAX_BOARD_POS], int current_selected[
                        printf("\n");
                    }
 
-    if (_num_selected>4)    ProbabilisticPosDetermination(board, _board_pos_x,_board_pos_y);
+    if (_num_selected>4)    RadialDotCheck(board, _board_pos_x,_board_pos_y);
     }
 
 
@@ -792,7 +792,7 @@ void CleanC_S(int current_selected[][3] , int num_selected){
     }
 }
 
-void ProbabilisticPosDetermination(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos_y){
+void RadialDotCheck(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos_y){
     int x1, y1, x0, y0, direcao=0;
 
     for(int i=1; i<_board_pos_x-1;i++){
