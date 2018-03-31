@@ -50,7 +50,7 @@ void CleanC_S(int[][3], int);
 void SinalizePointsToBeDeleted(int [][MAX_BOARD_POS], int [TABLE_SIZE][3], int , int, int, int );
 void ProbabilisticPosDetermination(int [][MAX_BOARD_POS], int, int);
 
-void HidePointsToBeRemoved(int [], int, SDL_Renderer *,int [][MAX_BOARD_POS], int, int);
+void HidePointsToBeRemoved(int [], int, SDL_Renderer *,int [][MAX_BOARD_POS], int, int, int [TABLE_SIZE][3]);
 void RenderPath(SDL_Renderer *, int, int[TABLE_SIZE][3],int, int []);
 void RemovePoints(int [], int, SDL_Renderer *, int, int[TABLE_SIZE][3]);
 // definition of some strings: they cannot be changed when the program is executed !
@@ -142,7 +142,7 @@ int main( void ){
             //Set points selected to -1. if a square is made sets the points of the square to -2 and all others of the same color to -1
             SinalizePointsToBeDeleted(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square);
             //paints the dots about to be removed with the background color
-            HidePointsToBeRemoved(board_size_px, square_size_px, renderer,board, board_pos_x, board_pos_y);
+            HidePointsToBeRemoved(board_size_px, square_size_px, renderer,board, board_pos_x, board_pos_y, current_selected);
             //simulates gravity
             MovePoints(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square);
 
@@ -678,8 +678,8 @@ void RemovePoints(int board_size_px[], int _square_size_px, SDL_Renderer *_rende
                 }
 }
 
-void HidePointsToBeRemoved (int board_size_px[], int _square_size_px, SDL_Renderer *_renderer,int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos_y){
-    int circleR,coord_x,coord_y;
+void HidePointsToBeRemoved (int board_size_px[], int _square_size_px, SDL_Renderer *_renderer,int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos_y, int current_selected[TABLE_SIZE][3]){
+    int circleR,coord_x,coord_y,clr;
 
     for(int j=0;j<_board_pos_x;j++){
         for(int k=_board_pos_y-1; k>=0;k--){
@@ -687,13 +687,15 @@ void HidePointsToBeRemoved (int board_size_px[], int _square_size_px, SDL_Render
                 coord_x = DotToCoordinate(0, board_size_px, _square_size_px,j);
                 coord_y = DotToCoordinate(1, board_size_px, _square_size_px,k);
                 circleR = (int)(_square_size_px*0.4f);
+
+                clr=current_selected[0][2];
                 // 205, 193, 181 color of the square
                 filledCircleRGBA(_renderer, coord_x, coord_y, circleR, 205, 193, 181);
+                if ((board[j][k])==-2) filledCircleRGBA(_renderer, coord_x, coord_y, circleR*1.5, colors[0][clr], colors[1][clr], colors[2][clr]);
+                if ((board[j][k])==-3) filledCircleRGBA(_renderer, coord_x, coord_y, circleR, 249, 166, 2);
             }
         }
     }
-
-
 
 }
 
@@ -730,7 +732,15 @@ void SinalizePointsToBeDeleted(int board[][MAX_BOARD_POS], int current_selected[
             }
         }
 
-        if (_num_selected>8)    ProbabilisticPosDetermination(board, _board_pos_x,_board_pos_y);
+        printf("COLOR_MATRIX\n");
+                   for(int i=0; i<_board_pos_y; i++){
+                       for(int j=0; j<_board_pos_x; j++){
+                           printf("[%d] ", board[j][i]);
+                       }
+                       printf("\n");
+                   }
+
+    if (_num_selected>4)    ProbabilisticPosDetermination(board, _board_pos_x,_board_pos_y);
     }
 
 
@@ -783,23 +793,26 @@ void CleanC_S(int current_selected[][3] , int num_selected){
 }
 
 void ProbabilisticPosDetermination(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos_y){
-    int roof, x1, y1, x0, y0, direcao;
-    srand(time(NULL));
+    int x1, y1, x0, y0, direcao=0;
 
     for(int i=1; i<_board_pos_x-1;i++){
             for(int j=1; j<_board_pos_y-1;j++){
                 //se pertencer à cor a eliminar não testa
-                if (board[i][j]<0) roof=10001;
-                printf("[%d,%d]\n",i,j );
-                x0=i;
-                y0=j;
+                if (board[i][j]<0) {
+                }
+                else{
 
-                while (roof<100) {
-                    printf(".");
-                    direcao=rand()%8;
+                    direcao=0;
+                    x0=i;
+                    y0=j;
+                    x1=i;
+                    y1=j;
 
-                    switch (direcao) {
+                    while (direcao<9){
+                        printf("[%d]\n", direcao);
+                        switch (direcao) {
                         case 0:
+                            printf("ALERTA");
                             x1=x0+1;
                             break;
                         case 1:
@@ -827,28 +840,31 @@ void ProbabilisticPosDetermination(int board[][MAX_BOARD_POS], int _board_pos_x,
                             x1=x0-1;
                             y1=y0+1;
                             break;
+                        case 8:
+                            board[i][j]=-3;
+                            break;
                         default:
                             break;
-                    }
-
-                    if (board[x1][y1]==-2) {
-                        x1=x0;
-                        y1=y0;
-                        printf("quadrado\n" );
-                    }
-                    else{
-                        if ((x1==0)||(y1==0)||(x1==(_board_pos_x-1))||(y1==(_board_pos_y-1))){
-                            printf("BORDA\n" );
-                            roof=101;
                         }
-                    }
 
-                    roof++;
+                        if (board[x1][y1]==-2){
+                            x0=i;
+                            y0=j;
+                            direcao++;
+                        }
+
+                        else if ((x1==0)||(y1==0)||(x1==(_board_pos_x-1))||(y1==(_board_pos_y-1)))  direcao=9;
+
+                        else{
+                            x0=x1;
+                            y0=y1;
+                        }
+
+                    }
                 }
 
-                if (roof==100) board[i][j]=-3;
 
-                roof=0;
+
             }
 
     }
