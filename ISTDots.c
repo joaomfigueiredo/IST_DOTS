@@ -577,6 +577,7 @@ void ParamReading(int *_board_pos_x, int *_board_pos_y, char player_name[] ,int 
 
 }
 
+//to be deleted
 void TestPrints(int board_pos_x, int board_pos_y, char player_name[] ,int ncolors, int n_moves){
 
         printf("%d %d %s %d %d", board_pos_x, board_pos_y, player_name, ncolors, n_moves);
@@ -600,11 +601,9 @@ void CurrentMove(int _pt_x,int _pt_y,int current_selected[TABLE_SIZE][3],int _bo
         *ptrflag_square=0;
     }
     else if(YNconnect(ptrnum_selected, current_selected,_board, _pt_x, _pt_y, ptrflag_square)==1){
-        printf("OUTRO %d\n",*ptrnum_selected );
         current_selected[*ptrnum_selected][0]=_pt_x;
         current_selected[*ptrnum_selected][1]=_pt_y;
         current_selected[*ptrnum_selected][2]=_board[_pt_x][_pt_y];
-        printf("outrosincrementos%d", *ptrnum_selected);
         *ptrnum_selected=*ptrnum_selected+1;
     }
 
@@ -616,11 +615,12 @@ int YNconnect(int *ptrnum_selected, int current_selected[TABLE_SIZE][3], int boa
     if ((_pt_x)==-1) return 0;
     //verifica se são consecutivos e garante que não interefere com o fundo
     if ((current_selected[*ptrnum_selected-2][0]==_pt_x)&&(current_selected[*ptrnum_selected-2][1]==_pt_y)){
+
         *ptrnum_selected=*ptrnum_selected-2;
         if (*ptrnum_selected<0) *ptrnum_selected=1;
-        printf("yn%d", *ptrnum_selected);
+
         *ptrflag_square=0;
-        printf("%d", *ptrflag_square );
+
         return 1;
     }
 
@@ -723,6 +723,18 @@ void SinalizePointsToBeDeleted(int board[][MAX_BOARD_POS], int current_selected[
         board[current_selected[i][0]][current_selected[i][1]]=marker;
     }
 
+    if(flag_square==1){
+        for(int j=0;j<_board_pos_x;j++){
+            for(int k=_board_pos_y; k>=0;k--){
+                if(board[j][k]==current_selected[0][2]) board[j][k]=-1;
+            }
+        }
+
+        if (_num_selected>8)    ProbabilisticPosDetermination(board, _board_pos_x,_board_pos_y);
+    }
+
+
+
 }
 
 void MovePoints(int board[][MAX_BOARD_POS], int current_selected[TABLE_SIZE][3], int _num_selected, int _board_pos_x, int _board_pos_y, int flag_square){
@@ -769,4 +781,76 @@ void CleanC_S(int current_selected[][3] , int num_selected){
         }
     }
 }
-//void PowerOfTheSquare()
+
+void ProbabilisticPosDetermination(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos_y){
+    int roof, x1, y1, x0, y0, direcao;
+    srand(time(NULL));
+
+    for(int i=1; i<_board_pos_x-1;i++){
+            for(int j=1; j<_board_pos_y-1;j++){
+                //se pertencer à cor a eliminar não testa
+                if (board[i][j]<0) roof=10001;
+                printf("[%d,%d]\n",i,j );
+                x0=i;
+                y0=j;
+
+                while (roof<100) {
+                    printf(".");
+                    direcao=rand()%8;
+
+                    switch (direcao) {
+                        case 0:
+                            x1=x0+1;
+                            break;
+                        case 1:
+                            x1=x0-1;
+                            break;
+                        case 2:
+                            y1=y0+1;
+                            break;
+                        case 3:
+                            y1=y0-1;
+                            break;
+                        case 4:
+                            x1=x0+1;
+                            y1=y0+1;
+                            break;
+                        case 5:
+                            x1=x0+1;
+                            y1=y0-1;
+                            break;
+                        case 6:
+                            x1=x0-1;
+                            y1=y0-1;
+                            break;
+                        case 7:
+                            x1=x0-1;
+                            y1=y0+1;
+                            break;
+                        default:
+                            break;
+                    }
+
+                    if (board[x1][y1]==-2) {
+                        x1=x0;
+                        y1=y0;
+                        printf("quadrado\n" );
+                    }
+                    else{
+                        if ((x1==0)||(y1==0)||(x1==(_board_pos_x-1))||(y1==(_board_pos_y-1))){
+                            printf("BORDA\n" );
+                            roof=101;
+                        }
+                    }
+
+                    roof++;
+                }
+
+                if (roof==100) board[i][j]=-3;
+
+                roof=0;
+            }
+
+    }
+
+}
