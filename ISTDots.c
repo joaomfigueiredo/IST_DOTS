@@ -47,8 +47,10 @@ int DotToCoordinate(int,  int [], int, int);
 void MovePoints(int [][MAX_BOARD_POS], int [TABLE_SIZE][3], int , int , int, int);
 void FreshNewPoints(int [][MAX_BOARD_POS], int , int,int);
 void CleanC_S(int[][3], int);
-void SinalizePointsToBeDeleted(int [][MAX_BOARD_POS], int [TABLE_SIZE][3], int , int, int, int );
-void RadialDotCheck(int [][MAX_BOARD_POS], int, int);
+void SinalizePointsToBeDeleted(int [][MAX_BOARD_POS], int [TABLE_SIZE][3], int , int, int, int, int[6] );
+void RadialDotCheck(int [][MAX_BOARD_POS], int, int, int [TABLE_SIZE][3], int[6]);
+void ResetGameStats(int[6]);
+
 
 void HidePointsToBeRemoved(int [], int, SDL_Renderer *,int [][MAX_BOARD_POS], int, int, int [TABLE_SIZE][3], int);
 void RenderPath(SDL_Renderer *, int, int[TABLE_SIZE][3],int, int []);
@@ -80,7 +82,7 @@ int main( void ){
     int current_selected[TABLE_SIZE][3]= {{-1}}, pressed=0,num_selected=0; //(in order)coordinates and color of dots selected , state of the mouse button, number of dots selected
     int state=0; // state0 -reading or waiting, state1 - removing dots, state2 - adding dots
     int flag_square=0; //1 if a square is done
-    int game_stats[6]= {0}; //1st cell - nº of plays; others - dots blown per color
+    int game_stats[6]= {0}; //last cell - nº of plays; others - dots blown per color(color code mantained)
     // initialize graphics
     InitEverything(width, height, &serif, imgs, &window, &renderer);
     ParamReading(&board_pos_x, &board_pos_y, player_name ,&ncolors, &n_moves);
@@ -99,6 +101,7 @@ int main( void ){
                 switch ( event.key.keysym.sym ){
                     case SDLK_n:
                         InitialBoard(board, board_pos_x, board_pos_y, ncolors);
+                        ResetGameStats(game_stats);
                         break;
                     case SDLK_q:
                         quit=1;
@@ -142,14 +145,24 @@ int main( void ){
             //fills with a color number the negative cells of the matrix
             FreshNewPoints(board, board_pos_x,board_pos_y, ncolors);
             SDL_Delay(delay);
+
+
+
             state=0;
-            if (num_selected>1) game_stats[0]++;
+            if (num_selected>1) game_stats[5]++;
+
+
+            for (int o=0; o<6;o++){
+                printf("game_stats __%d__[%d]\n",o, game_stats[o] );
+
+            }
+
             num_selected=0;
         }
 
         if (state==1) {
             //Set points selected to -1. if a square is made sets the points of the square to -2, those inside to -3, and all others of the same color to -1
-            SinalizePointsToBeDeleted(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square);
+            SinalizePointsToBeDeleted(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square, game_stats);
             //paints the dots about to be removed with the background color
             HidePointsToBeRemoved(board_size_px, square_size_px, renderer,board, board_pos_x, board_pos_y, current_selected, state);
             //simulates gravity
@@ -166,7 +179,7 @@ int main( void ){
         CleanC_S(current_selected, num_selected);
         // add a delay
         SDL_Delay( delay);
-        printf("%d\n", flag_square);
+
 
     }
 
@@ -737,10 +750,12 @@ int DotToCoordinate(int  X0Y1,  int board_size_px[], int _square_size_px, int IN
     }
 }
 
-void SinalizePointsToBeDeleted(int board[][MAX_BOARD_POS], int current_selected[TABLE_SIZE][3], int _num_selected, int _board_pos_x, int _board_pos_y, int flag_square){
+void SinalizePointsToBeDeleted(int board[][MAX_BOARD_POS], int current_selected[TABLE_SIZE][3], int _num_selected, int _board_pos_x, int _board_pos_y, int flag_square, int game_stats[6]){
     int marker=-1;
 
     if (_num_selected==1) return;
+
+    game_stats[current_selected[0][2]]+=_num_selected;
 
     for(int i=0; i<_num_selected;i++){
 
@@ -750,25 +765,20 @@ void SinalizePointsToBeDeleted(int board[][MAX_BOARD_POS], int current_selected[
     }
 
     if(flag_square==1){
+        //caso haja um quadrado o ponto de cruzamento esta selecionado duas vezes
+        game_stats[current_selected[0][2]]--;
+
         for(int j=0;j<_board_pos_x;j++){
             for(int k=_board_pos_y; k>=0;k--){
-                if(board[j][k]==current_selected[0][2]) board[j][k]=-1;
+                if(board[j][k]==current_selected[0][2]){
+
+                    board[j][k]=-1;
+                    game_stats[current_selected[0][2]]++;
+                }
             }
         }
-
-        printf("BeforeRAdial\n");
-                   for(int i=0; i<_board_pos_y; i++){
-                       for(int j=0; j<_board_pos_x; j++){
-                           if (board[j][i]<0) printf("[%d] ", board[j][i]);
-                           else printf("[ %d] ", board[j][i]);
-                       }
-                       printf("\n");
-                   }
-
-    if (_num_selected>4)    RadialDotCheck(board, _board_pos_x,_board_pos_y);
+    if (_num_selected>4)    RadialDotCheck(board, _board_pos_x,_board_pos_y, current_selected, game_stats);
     }
-
-
 
 }
 
@@ -793,14 +803,7 @@ void MovePoints(int board[][MAX_BOARD_POS], int current_selected[TABLE_SIZE][3],
             else {}
         }
     }
-    printf("afterMOVing\n");
-    for(int i=0; i<_board_pos_y; i++){
-        for(int j=0; j<_board_pos_x; j++){
-            if (board[j][i]<0) printf("[%d] ", board[j][i]);
-            else printf("[ %d] ", board[j][i]);
-        }
-        printf("\n");
-    }
+
     //após sevir o seu propósito reinicia-se para um valor grande o suficiente para nao afetar futuras jogadas
     current_selected[CROSSING_POINT][0]=1000;
 
@@ -824,7 +827,7 @@ void CleanC_S(int current_selected[][3] , int num_selected){
     }
 }
 
-void RadialDotCheck(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos_y){
+void RadialDotCheck(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos_y, int current_selected[TABLE_SIZE][3], int game_stats[6]){
     int x1, y1, x0, y0, direcao=0;
 
     for(int i=1; i<_board_pos_x-1;i++){
@@ -868,6 +871,8 @@ void RadialDotCheck(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos
                             y1=y0+1;
                             break;
                         case 8:
+                            //inc. the counter of the dot color if it isn't already counted(the dots with the same color of the square)
+                            if(board[i][j]!=current_selected[0][2]) game_stats[board[i][j]]++;
                             board[i][j]=-3;
                             break;
                         default:
@@ -889,5 +894,11 @@ void RadialDotCheck(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos
                     }
 
             }
+    }
+}
+
+void ResetGameStats(int game_stats[6]){
+    for(int i=0; i<6; i++){
+        game_stats[i]=0;
     }
 }
