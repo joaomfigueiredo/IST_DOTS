@@ -50,7 +50,7 @@ void CleanC_S(int[][3], int);
 void SinalizePointsToBeDeleted(int [][MAX_BOARD_POS], int [TABLE_SIZE][3], int , int, int, int );
 void RadialDotCheck(int [][MAX_BOARD_POS], int, int);
 
-void HidePointsToBeRemoved(int [], int, SDL_Renderer *,int [][MAX_BOARD_POS], int, int, int [TABLE_SIZE][3]);
+void HidePointsToBeRemoved(int [], int, SDL_Renderer *,int [][MAX_BOARD_POS], int, int, int [TABLE_SIZE][3], int);
 void RenderPath(SDL_Renderer *, int, int[TABLE_SIZE][3],int, int []);
 void RemovePoints(int [], int, SDL_Renderer *, int, int[TABLE_SIZE][3]);
 // definition of some strings: they cannot be changed when the program is executed !
@@ -67,7 +67,7 @@ int main( void ){
     TTF_Font *serif = NULL;
     SDL_Surface *imgs[2];
     SDL_Event event;
-    int delay = 300;
+    int delay = 1;
     int quit = 0;
     int width = (TABLE_SIZE + LEFT_BAR_SIZE);
     int height = TABLE_SIZE;
@@ -77,10 +77,10 @@ int main( void ){
     int pt_x = 0, pt_y = 0;
     char player_name[30]= "anon0001\0";
     int ncolors=MAX_COLORS, n_moves=100;
-    int current_selected[TABLE_SIZE][3], pressed=0,num_selected=0; //(in order)coordinates and color of dots selected , state of the mouse button, number of dots selected
-    int state=0; // TO be REVIEWWWWWWWWWWWWWWWEDDDDDDDDDDDDD
+    int current_selected[TABLE_SIZE][3]= {{-1}}, pressed=0,num_selected=0; //(in order)coordinates and color of dots selected , state of the mouse button, number of dots selected
+    int state=0; // state0 -reading or waiting, state1 - removing dots, state2 - adding dots
     int flag_square=0; //1 if a square is done
-
+    int game_stats[6]= {0}; //1st cell - nº of plays; others - dots blown per color
     // initialize graphics
     InitEverything(width, height, &serif, imgs, &window, &renderer);
     ParamReading(&board_pos_x, &board_pos_y, player_name ,&ncolors, &n_moves);
@@ -111,14 +111,14 @@ int main( void ){
 
             else if ( event.type == SDL_MOUSEBUTTONDOWN ){
                 ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y, board_pos_x, board_pos_y);
-                printf("Button down: %d %d\n", pt_x, pt_y);
+                //printf("Button down: %d %d\n", pt_x, pt_y);
                 pressed=1;
                 CurrentMove(pt_x, pt_y,current_selected,board,&num_selected, &flag_square);
             }
 
             else if ( event.type == SDL_MOUSEBUTTONUP ){
                 ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y, board_pos_x, board_pos_y);
-                printf("Button up: %d %d\n", pt_x, pt_y);
+                //printf("Button up: %d %d\n", pt_x, pt_y);
                 state=1;
                 pressed=0;
             }
@@ -126,7 +126,7 @@ int main( void ){
             else if ( event.type == SDL_MOUSEMOTION ){
             //    printf("NUMEROCORES[%d]\n",ncolors );
                 ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y,board_pos_x, board_pos_y);
-                printf("Moving Mouse: %d %d\n", pt_x, pt_y);
+                //printf("Moving Mouse: %d %d\n", pt_x, pt_y);
                 if (pressed==1) CurrentMove(pt_x, pt_y,current_selected, board, &num_selected, &flag_square);
 
             }
@@ -136,31 +136,37 @@ int main( void ){
         // render board
         RenderPoints(board, board_pos_x, board_pos_y, board_size_px, square_size_px, renderer);
 
-        if (state==1) {
-            //RemovePoints(board_size_px, square_size_px, renderer,num_selected, current_selected);
-            state=2;
-            //Set points selected to -1. if a square is made sets the points of the square to -2 and all others of the same color to -1
-            SinalizePointsToBeDeleted(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square);
-            //paints the dots about to be removed with the background color
-            HidePointsToBeRemoved(board_size_px, square_size_px, renderer,board, board_pos_x, board_pos_y, current_selected);
-            //simulates gravity
-            MovePoints(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square);
-
-            num_selected=0;
+        if (state==2){
+            //as state==2 this function paint the spaces left blank after the descent of the points
+            HidePointsToBeRemoved(board_size_px, square_size_px, renderer,board, board_pos_x, board_pos_y, current_selected, state);
+            //fills with a color number the negative cells of the matrix
             FreshNewPoints(board, board_pos_x,board_pos_y, ncolors);
+            SDL_Delay(delay);
+            state=0;
+            if (num_selected>1) game_stats[0]++;
+            num_selected=0;
         }
 
+        if (state==1) {
+            //Set points selected to -1. if a square is made sets the points of the square to -2, those inside to -3, and all others of the same color to -1
+            SinalizePointsToBeDeleted(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square);
+            //paints the dots about to be removed with the background color
+            HidePointsToBeRemoved(board_size_px, square_size_px, renderer,board, board_pos_x, board_pos_y, current_selected, state);
+            //simulates gravity
+            MovePoints(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square);
+            state++;
+            SDL_Delay(delay);
+        }
 
-        RenderPath(renderer, num_selected,current_selected,square_size_px, board_size_px);
+        if (state<2) RenderPath(renderer, num_selected,current_selected,square_size_px, board_size_px);
+
         // render in the screen all changes above
         SDL_RenderPresent(renderer);
         //sets all the cells of current_selected not in use to -1
         CleanC_S(current_selected, num_selected);
-
-
         // add a delay
         SDL_Delay( delay);
-
+        printf("%d\n", flag_square);
 
     }
 
@@ -597,7 +603,7 @@ void CurrentMove(int _pt_x,int _pt_y,int current_selected[TABLE_SIZE][3],int _bo
         current_selected[0][0]=_pt_x;
         current_selected[0][1]=_pt_y;
         current_selected[0][2]=_board[_pt_x][_pt_y];
-        *ptrnum_selected=*ptrnum_selected+1;
+        *ptrnum_selected=1;
         *ptrflag_square=0;
     }
     else if(YNconnect(ptrnum_selected, current_selected,_board, _pt_x, _pt_y, ptrflag_square)==1){
@@ -615,11 +621,11 @@ int YNconnect(int *ptrnum_selected, int current_selected[TABLE_SIZE][3], int boa
     if ((_pt_x)==-1) return 0;
     //verifica se são consecutivos e garante que não interefere com o fundo
     if ((current_selected[*ptrnum_selected-2][0]==_pt_x)&&(current_selected[*ptrnum_selected-2][1]==_pt_y)){
-
-        *ptrnum_selected=*ptrnum_selected-2;
-        if (*ptrnum_selected<0) *ptrnum_selected=1;
-
         *ptrflag_square=0;
+        *ptrnum_selected=*ptrnum_selected-2;
+        if (*ptrnum_selected<1) *ptrnum_selected=0;
+
+
 
         return 1;
     }
@@ -649,8 +655,10 @@ int YNconnect(int *ptrnum_selected, int current_selected[TABLE_SIZE][3], int boa
 
 void RenderPath(SDL_Renderer* _renderer, int _num_selected, int current_selected[TABLE_SIZE][3], int _square_size_px,int board_size_px[2]){
 
-        int x1, x2, y1, y2,clr;
-        for(int j=-3; j<4;j++){
+        int x1, x2, y1, y2,clr, thickness;
+        //assures that the the thickness of the linker as a constant proportion to the dots size
+        thickness=_square_size_px*0.1;
+        for(int j=-thickness; j<thickness;j++){
             for (int i=0; i<_num_selected-1;i++){
                 x1 = DotToCoordinate(0, board_size_px, _square_size_px,current_selected[i][0])+j;// * (_square_size_px + SQUARE_SEPARATOR)+200;
                 y1 = DotToCoordinate(1, board_size_px, _square_size_px,current_selected[i][1])+j;// *(_square_size_px + SQUARE_SEPARATOR)+200;
@@ -678,8 +686,23 @@ void RemovePoints(int board_size_px[], int _square_size_px, SDL_Renderer *_rende
                 }
 }
 
-void HidePointsToBeRemoved (int board_size_px[], int _square_size_px, SDL_Renderer *_renderer,int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos_y, int current_selected[TABLE_SIZE][3]){
+void HidePointsToBeRemoved (int board_size_px[], int _square_size_px, SDL_Renderer *_renderer,int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos_y, int current_selected[TABLE_SIZE][3], int state){
     int circleR,coord_x,coord_y,clr;
+
+    if (state==2){
+            for(int j=0;j<_board_pos_x;j++){
+                for(int k=_board_pos_y-1; k>=0;k--){
+                    if(board[j][k]<0){
+                        coord_x = DotToCoordinate(0, board_size_px, _square_size_px,j);
+                        coord_y = DotToCoordinate(1, board_size_px, _square_size_px,k);
+                        circleR = (int)(_square_size_px*0.4f);
+                        // 205, 193, 181 color of the square
+                        filledCircleRGBA(_renderer, coord_x, coord_y, circleR, 205, 193, 181);
+                    }
+                }
+            }
+            return;
+    }
 
     for(int j=0;j<_board_pos_x;j++){
         for(int k=_board_pos_y-1; k>=0;k--){
@@ -690,8 +713,9 @@ void HidePointsToBeRemoved (int board_size_px[], int _square_size_px, SDL_Render
 
                 clr=current_selected[0][2];
                 // 205, 193, 181 color of the square
-                filledCircleRGBA(_renderer, coord_x, coord_y, circleR, 205, 193, 181);
+
                 if ((board[j][k])==-2) filledCircleRGBA(_renderer, coord_x, coord_y, circleR*1.5, colors[0][clr], colors[1][clr], colors[2][clr]);
+                filledCircleRGBA(_renderer, coord_x, coord_y, circleR, 205, 193, 181);
                 if ((board[j][k])==-3) filledCircleRGBA(_renderer, coord_x, coord_y, circleR, 249, 166, 2);
             }
         }
@@ -720,7 +744,7 @@ void SinalizePointsToBeDeleted(int board[][MAX_BOARD_POS], int current_selected[
 
     for(int i=0; i<_num_selected;i++){
 
-        if(i>=current_selected[CROSSING_POINT][0]) marker=-2;
+        if(i>=current_selected[CROSSING_POINT][0]&&flag_square==1) marker=-2;
 
         board[current_selected[i][0]][current_selected[i][1]]=marker;
     }
@@ -732,10 +756,11 @@ void SinalizePointsToBeDeleted(int board[][MAX_BOARD_POS], int current_selected[
             }
         }
 
-        printf("COLOR_MATRIX\n");
+        printf("BeforeRAdial\n");
                    for(int i=0; i<_board_pos_y; i++){
                        for(int j=0; j<_board_pos_x; j++){
-                           printf("[%d] ", board[j][i]);
+                           if (board[j][i]<0) printf("[%d] ", board[j][i]);
+                           else printf("[ %d] ", board[j][i]);
                        }
                        printf("\n");
                    }
@@ -753,7 +778,7 @@ void MovePoints(int board[][MAX_BOARD_POS], int current_selected[TABLE_SIZE][3],
     if (_num_selected==1) return; //se só houver um número
 
     for(int j=0;j<_board_pos_x;j++){
-        for(int k=_board_pos_y; k>=0;k--){
+        for(int k=_board_pos_y-1; k>=0;k--){
             if (board[j][k]<0){
                 l=k-1;
                 while (l>=0){
@@ -768,7 +793,14 @@ void MovePoints(int board[][MAX_BOARD_POS], int current_selected[TABLE_SIZE][3],
             else {}
         }
     }
-
+    printf("afterMOVing\n");
+    for(int i=0; i<_board_pos_y; i++){
+        for(int j=0; j<_board_pos_x; j++){
+            if (board[j][i]<0) printf("[%d] ", board[j][i]);
+            else printf("[ %d] ", board[j][i]);
+        }
+        printf("\n");
+    }
     //após sevir o seu propósito reinicia-se para um valor grande o suficiente para nao afetar futuras jogadas
     current_selected[CROSSING_POINT][0]=1000;
 
@@ -797,10 +829,7 @@ void RadialDotCheck(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos
 
     for(int i=1; i<_board_pos_x-1;i++){
             for(int j=1; j<_board_pos_y-1;j++){
-                //se pertencer à cor a eliminar não testa
-                if (board[i][j]<0) {
-                }
-                else{
+
 
                     direcao=0;
                     x0=i;
@@ -809,10 +838,8 @@ void RadialDotCheck(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos
                     y1=j;
 
                     while (direcao<9){
-                        printf("[%d]\n", direcao);
                         switch (direcao) {
                         case 0:
-                            printf("ALERTA");
                             x1=x0+1;
                             break;
                         case 1:
@@ -859,14 +886,8 @@ void RadialDotCheck(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos
                             x0=x1;
                             y0=y1;
                         }
-
                     }
-                }
-
-
 
             }
-
     }
-
 }
