@@ -58,7 +58,7 @@ void RemovePoints(int [], int, SDL_Renderer *, int, int[TABLE_SIZE][3]);
 // definition of some strings: they cannot be changed when the program is executed !
 const char myName[] = "Joao Figueiredo";
 const char myNumber[] = "IST190108";
-const int colors[3][MAX_COLORS] = {{1, 255, 255, 39, 242},{62,27,0, 204, 255},{255, 35, 255, 0, 0}};
+const int colors[3][MAX_COLORS] = {{140, 231, 140, 231, 153},{189, 90, 231, 222, 90},{254, 74, 148, 41, 180}};
 /**
  * main function: entry point of the program
  * only to invoke other functions !
@@ -69,7 +69,7 @@ int main( void ){
     TTF_Font *serif = NULL;
     SDL_Surface *imgs[2];
     SDL_Event event;
-    int delay = 1;
+    int delay = 30;
     int quit = 0;
     int width = (TABLE_SIZE + LEFT_BAR_SIZE);
     int height = TABLE_SIZE;
@@ -344,7 +344,7 @@ int RenderTable( int _board_pos_x, int _board_pos_y, int _board_size_px[],
         TTF_Font *_font, SDL_Surface *_img[], SDL_Renderer* _renderer ){
 
     SDL_Color black = { 0, 0, 0 }; // black
-    SDL_Color light = { 205, 193, 181 };
+    SDL_Color light = { 240, 240, 240 };
     SDL_Color dark = { 120, 110, 102 };
     SDL_Texture *table_texture;
     SDL_Rect tableSrc, tableDest, board, board_square;
@@ -384,7 +384,7 @@ int RenderTable( int _board_pos_x, int _board_pos_y, int _board_size_px[],
     _board_size_px[1] = _board_pos_y*(square_size_px+SQUARE_SEPARATOR)+SQUARE_SEPARATOR;
 
     // renders the entire board background
-    SDL_SetRenderDrawColor(_renderer, dark.r, dark.g, dark.b, dark.a );
+    SDL_SetRenderDrawColor(_renderer, light.r, light.g, light.b, light.a );
     board.x = (TABLE_SIZE - _board_size_px[0]) >> 1;
     board.y = (TABLE_SIZE - _board_size_px[1] - 15);
     board.w = _board_size_px[0];
@@ -392,7 +392,7 @@ int RenderTable( int _board_pos_x, int _board_pos_y, int _board_size_px[],
     SDL_RenderFillRect(_renderer, &board);
 
     // renders the squares where the numbers will appear
-    SDL_SetRenderDrawColor(_renderer, light.r, light.g, light.b, light.a );
+
 
     // iterate over all squares
     for ( int i = 0; i < _board_pos_x; i++ )
@@ -403,7 +403,7 @@ int RenderTable( int _board_pos_x, int _board_pos_y, int _board_size_px[],
             board_square.y = board.y + (j+1)*SQUARE_SEPARATOR + j*square_size_px;
             board_square.w = square_size_px;
             board_square.h = square_size_px;
-            SDL_RenderFillRect(_renderer, &board_square);
+        //    SDL_RenderFillRect(_renderer, &board_square);
         }
     }
 
