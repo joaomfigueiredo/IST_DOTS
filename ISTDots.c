@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include<math.h>
+#include<string.h>
 //for xor operand
 #include<iso646.h>
 
@@ -22,6 +23,8 @@
 #define MAX_COLORS 5
 #define MARGIN 5
 #define CROSSING_POINT 501    // adress of current_selected[][] in wich is saved point were the square is closed
+#define BUFFER_SIZE 100  //size of buffer read from stdin
+
 
 // declaration of the functions related to graphical issues
 void InitEverything(int , int , TTF_Font **, SDL_Surface **, SDL_Window ** , SDL_Renderer ** );
@@ -38,8 +41,8 @@ void RenderStats( SDL_Renderer *, TTF_Font *, int [], int , int );
 void filledCircleRGBA(SDL_Renderer * , int , int , int , int , int , int );
 
 //definition of the functions that give a purpose to the graphics
-void ParamReading(int *, int *, char[] , int *, int *);
-void TestPrints(int, int , char[], int, int);
+void ParamReading(int *, int *, char[] , int *, int[]);
+void TestPrints(int, int , char[], int, int[]);
 void InitialBoard(int[][MAX_BOARD_POS], int, int, int);
 void CurrentMove(int, int,int[TABLE_SIZE][3],int[][MAX_BOARD_POS], int *, int *);
 int  YNconnect(int*, int[TABLE_SIZE][3],int[][MAX_BOARD_POS], int, int, int*);
@@ -77,17 +80,21 @@ int main( void ){
     int board_pos_x = 0, board_pos_y = 0;
     int board[MAX_BOARD_POS][MAX_BOARD_POS] = {{0}};
     int pt_x = 0, pt_y = 0;
-    char player_name[30]= "anon0001\0";
-    int ncolors=MAX_COLORS, n_moves=100;
+    char player_name[BUFFER_SIZE];
+    int ncolors=MAX_COLORS;
     int current_selected[TABLE_SIZE][3]= {{-1}}, pressed=0,num_selected=0; //(in order)coordinates and color of dots selected , state of the mouse button, number of dots selected
     int state=0; // state0 -reading or waiting, state1 - removing dots, state2 - adding dots
     int flag_square=0; //1 if a square is done
-    int game_stats[6]= {0}; //last cell - nº of plays; others - dots blown per color(color code mantained)
+    int game_stats[6]= {0}, game_targets[6]={0}; //last cell - nº of plays; others - dots blown per color(color code mantained)
     // initialize graphics
-    InitEverything(width, height, &serif, imgs, &window, &renderer);
-    ParamReading(&board_pos_x, &board_pos_y, player_name ,&ncolors, &n_moves);
-    TestPrints(board_pos_x,board_pos_y, player_name, ncolors, n_moves);
+    ParamReading(&board_pos_x, &board_pos_y, player_name ,&ncolors, game_targets);
     InitialBoard(board, board_pos_x, board_pos_y, ncolors);
+
+
+    InitEverything(width, height, &serif, imgs, &window, &renderer);
+
+    TestPrints(board_pos_x,board_pos_y, player_name, ncolors, game_targets);
+
 
     while( quit == 0 )
     {
@@ -580,26 +587,84 @@ SDL_Renderer* CreateRenderer(int width, int height, SDL_Window *_window){
     return renderer;
 }
 
-void ParamReading(int *_board_pos_x, int *_board_pos_y, char player_name[] ,int *_ncolors, int *_n_moves){
+void ParamReading(int *_board_pos_x, int *_board_pos_y, char player_name[] ,int *_ncolors, int game_targets[]){
+    char buffer[BUFFER_SIZE];
 
-    printf("Dimensão horizontal seguida da vertical: ");
-    scanf("%d %d", _board_pos_x, _board_pos_y);
+    while(1){
+        printf("Introduz as dimensões do tabuleiro (5 a 15)(horizontal [espaço] vertical):  ");
 
-    printf("Nome do jogador(até 8 caracteres): ");
-    scanf("%s", player_name);
+        if(fgets(buffer, BUFFER_SIZE, stdin)==NULL) exit(-1);
 
-   printf("Numero de cores(ate 5):" );
-    scanf("%d", _ncolors);
+        if((sscanf(buffer," %d %d", _board_pos_x, _board_pos_y)==2)&&(4<*_board_pos_x&&*_board_pos_x<16)&&(4<*_board_pos_y&&*_board_pos_y<16)) break;
 
-    printf("Numero de movimentos(ate 100):" );
-    scanf("%d", _n_moves);
+        else (printf("Verifica os valores introduzidos\n"));
+    }
+
+    while(1){
+        printf("Introduz o teu nome: ");
+
+        if(fgets(buffer, BUFFER_SIZE, stdin)==NULL) exit(-1);
+
+        if((sscanf(buffer," %s ", player_name)==1)){
+            if(strlen(player_name)<9) break;
+            else (printf("A dimensão máxima é 8 caracteres.\n"));
+        }
+        else (printf("Verifica os valores introduzidos\n"));
+    }
+
+
+    while(1){
+        printf("Numero de cores(ate 5): ");
+        if(fgets(buffer, BUFFER_SIZE, stdin)==NULL) exit(-1);
+            if((sscanf(buffer," %d", _ncolors)==1)&&(0<*_ncolors&&*_ncolors<6)) break;
+        else (printf("Nº de cores entre 1 e 5 (inclusive)\n"));
+    }
+
+
+    printf("OBJETIVOS:\n");
+    for(int i=0; i<*_ncolors;i++){
+        while(1){
+            switch (i){
+                case(0):
+                    printf("Nº de azuis: " );
+                    break;
+                case(1):
+                    printf("Nº de vermelhos: " );
+                    break;
+                case(2):
+                    printf("Nº de verdes: " );
+                    break;
+                case(3):
+                    printf("Nº de amarelos: " );
+                    break;
+                case(4):
+                    printf("Nº de roxos: " );
+                    break;
+            }
+            if(fgets(buffer, BUFFER_SIZE, stdin)==NULL) exit(-1);
+            if((sscanf(buffer," %d", &game_targets[i])==1)&&(0<game_targets[i]&&game_targets[i]<100)) break;
+            else (printf("Objetivos entre 1 e 99 (inclusive).\n"));
+        }
+    }
+
+    while(1){
+        printf("Numero de movimentos(ate 99): ");
+        if(fgets(buffer, BUFFER_SIZE, stdin)==NULL) exit(-1);
+        if((sscanf(buffer," %d", &game_targets[6])==1)&&(0<game_targets[6]&&game_targets[6]<100)) break;
+        else (printf("Verifica os valores introduzidos\n"));
+    }
+
+
 
 }
 
 //to be deleted
-void TestPrints(int board_pos_x, int board_pos_y, char player_name[] ,int ncolors, int n_moves){
+void TestPrints(int board_pos_x, int board_pos_y, char player_name[] ,int ncolors, int game_targets[]){
 
-        printf("%d %d %s %d %d", board_pos_x, board_pos_y, player_name, ncolors, n_moves);
+        printf("%d %d %s %d aqui %d\n", board_pos_x, board_pos_y, player_name, ncolors, game_targets[0]);
+        for(int i=0;i<6;i++){
+            printf("%d",game_targets[i]);
+        }
 }
 
 void InitialBoard(int board[][MAX_BOARD_POS], int board_pos_x, int board_pos_y, int ncolors) {
