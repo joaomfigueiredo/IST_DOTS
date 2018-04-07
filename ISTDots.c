@@ -27,17 +27,17 @@
 
 
 // declaration of the functions related to graphical issues
-void InitEverything(int , int , TTF_Font **, SDL_Surface **, SDL_Window ** , SDL_Renderer ** );
+void InitEverything(int , int , TTF_Font **, TTF_Font **, SDL_Surface **, SDL_Window ** , SDL_Renderer ** );
 void InitSDL();
 void InitFont();
 SDL_Window* CreateWindow(int , int );
 SDL_Renderer* CreateRenderer(int , int , SDL_Window *);
 int RenderText(int, int, const char *, TTF_Font *, SDL_Color *, SDL_Renderer *);
 int RenderLogo(int, int, SDL_Surface *, SDL_Renderer *);
-int RenderTable(int, int, int [], TTF_Font *, SDL_Surface **, SDL_Renderer *);
+int RenderTable(int, int, int [], TTF_Font *, SDL_Surface **, SDL_Renderer *, char[]);
 void ProcessMouseEvent(int , int , int [], int , int *, int *, int, int );
 void RenderPoints(int [][MAX_BOARD_POS], int, int, int [], int, SDL_Renderer *);
-void RenderStats( SDL_Renderer *, TTF_Font *, int [], int , int );
+void RenderStats( SDL_Renderer *, TTF_Font *, int [], int , int, char[], int, int [TABLE_SIZE][3], int, int);
 void filledCircleRGBA(SDL_Renderer * , int , int , int , int , int , int );
 
 //definition of the functions that give a purpose to the graphics
@@ -52,7 +52,7 @@ void FreshNewPoints(int [][MAX_BOARD_POS], int , int,int);
 void CleanC_S(int[][3], int);
 void SinalizePointsToBeDeleted(int [][MAX_BOARD_POS], int [TABLE_SIZE][3], int , int, int, int, int[6] );
 void RadialDotCheck(int [][MAX_BOARD_POS], int, int, int [TABLE_SIZE][3], int[6]);
-void ResetGameStats(int[6]);
+void SetGameStats(int[6], int[6]);
 
 
 void HidePointsToBeRemoved(int [], int, SDL_Renderer *,int [][MAX_BOARD_POS], int, int, int [TABLE_SIZE][3], int);
@@ -70,6 +70,7 @@ int main( void ){
     SDL_Window *window = NULL;
     SDL_Renderer *renderer = NULL;
     TTF_Font *serif = NULL;
+    TTF_Font *sans = NULL ;
     SDL_Surface *imgs[2];
     SDL_Event event;
     int delay = 30;
@@ -86,12 +87,13 @@ int main( void ){
     int state=0; // state0 -reading or waiting, state1 - removing dots, state2 - adding dots
     int flag_square=0; //1 if a square is done
     int game_stats[6]= {0}, game_targets[6]={0}; //last cell - nº of plays; others - dots blown per color(color code mantained)
+    char convToDisplay[3];
     // initialize graphics
     ParamReading(&board_pos_x, &board_pos_y, player_name ,&ncolors, game_targets);
     InitialBoard(board, board_pos_x, board_pos_y, ncolors);
 
 
-    InitEverything(width, height, &serif, imgs, &window, &renderer);
+    InitEverything(width, height, &serif, &sans, imgs, &window, &renderer);
 
     TestPrints(board_pos_x,board_pos_y, player_name, ncolors, game_targets);
 
@@ -108,7 +110,7 @@ int main( void ){
                 switch ( event.key.keysym.sym ){
                     case SDLK_n:
                         InitialBoard(board, board_pos_x, board_pos_y, ncolors);
-                        ResetGameStats(game_stats);
+                        SetGameStats(game_stats, game_targets);
                         break;
                     case SDLK_q:
                         quit=1;
@@ -141,8 +143,9 @@ int main( void ){
 
             }
         }
+
         // render game table
-        square_size_px = RenderTable( board_pos_x, board_pos_y, board_size_px, serif, imgs, renderer);
+        square_size_px = RenderTable( board_pos_x, board_pos_y, board_size_px, serif, imgs, renderer, player_name);
         // render board
         RenderPoints(board, board_pos_x, board_pos_y, board_size_px, square_size_px, renderer);
 
@@ -178,8 +181,13 @@ int main( void ){
             SDL_Delay(delay);
         }
 
-        if (state<2) RenderPath(renderer, num_selected,current_selected,square_size_px, board_size_px);
+        if (state<2){
+            RenderPath(renderer, num_selected,current_selected,square_size_px, board_size_px);
 
+        }
+
+
+        RenderStats(renderer, sans, game_stats, ncolors, num_selected, convToDisplay, state, current_selected, num_selected, flag_square);
         // render in the screen all changes above
         SDL_RenderPresent(renderer);
         //sets all the cells of current_selected not in use to -1
@@ -192,6 +200,7 @@ int main( void ){
 
     // free memory allocated for images and textures and closes everything including fonts
     TTF_CloseFont(serif);
+    TTF_CloseFont(sans);
     SDL_FreeSurface(imgs[0]);
     SDL_FreeSurface(imgs[1]);
     SDL_DestroyRenderer(renderer);
@@ -330,9 +339,7 @@ void filledCircleRGBA(SDL_Renderer * _renderer, int _circleX, int _circleY, int 
  * \param _ncolors number of colors
  * \param _moves number of moves remaining
  */
-void RenderStats( SDL_Renderer *_renderer, TTF_Font *_font, int _goals[], int _ncolors, int _moves){
-    /* To Be Done */
-}
+
 
 /**
  * RenderTable: Draws the table where the game will be played, namely:
@@ -348,7 +355,7 @@ void RenderStats( SDL_Renderer *_renderer, TTF_Font *_font, int _goals[], int _n
  */
 
 int RenderTable( int _board_pos_x, int _board_pos_y, int _board_size_px[],
-        TTF_Font *_font, SDL_Surface *_img[], SDL_Renderer* _renderer ){
+        TTF_Font *_font, SDL_Surface *_img[], SDL_Renderer* _renderer, char player_name[] ){
 
     SDL_Color black = { 0, 0, 0 }; // black
     SDL_Color light = { 240, 240, 240 };
@@ -381,7 +388,12 @@ int RenderTable( int _board_pos_x, int _board_pos_y, int _board_size_px[],
     height += RenderText(TABLE_SIZE+3*MARGIN, height, myName, _font, &black, _renderer);
 
     // this renders the student number
-    RenderText(TABLE_SIZE+3*MARGIN, height, myNumber, _font, &black, _renderer);
+    height+=RenderText(TABLE_SIZE+3*MARGIN, height, myNumber, _font, &black, _renderer);
+
+    //render the player_name
+    height+=RenderText(TABLE_SIZE+3*MARGIN, height, "Jogador:" , _font, &black, _renderer);
+    RenderText(TABLE_SIZE+5*MARGIN, height, player_name, _font, &black, _renderer);
+
 
     // compute and adjust the size of the table and squares
     max_pos = MAX(_board_pos_x, _board_pos_y);
@@ -490,7 +502,7 @@ int RenderText(int x, int y, const char *text, TTF_Font *_font, SDL_Color *_colo
  * \param _window represents the window of the application
  * \param _renderer renderer to handle all rendering in a window
  */
-void InitEverything(int width, int height, TTF_Font **_font, SDL_Surface *_img[], SDL_Window** _window, SDL_Renderer** _renderer){
+void InitEverything(int width, int height, TTF_Font **_font, TTF_Font **_font1, SDL_Surface *_img[], SDL_Window** _window, SDL_Renderer** _renderer){
     InitSDL();
     InitFont();
     *_window = CreateWindow(width, height);
@@ -518,6 +530,16 @@ void InitEverything(int width, int height, TTF_Font **_font, SDL_Surface *_img[]
         printf("TTF_OpenFont: %s\n", TTF_GetError());
         exit(EXIT_FAILURE);
     }
+    // this opens (loads) a NEW font file and sets a size
+    *_font1 = TTF_OpenFont("OpenSans.ttf", 22);
+    if(!*_font1)
+    {
+        printf("TTF_OpenFont: %s\n", TTF_GetError());
+        exit(EXIT_FAILURE);
+    }
+
+
+
 }
 
 /**
@@ -650,7 +672,7 @@ void ParamReading(int *_board_pos_x, int *_board_pos_y, char player_name[] ,int 
     while(1){
         printf("Numero de movimentos(ate 99): ");
         if(fgets(buffer, BUFFER_SIZE, stdin)==NULL) exit(-1);
-        if((sscanf(buffer," %d", &game_targets[6])==1)&&(0<game_targets[6]&&game_targets[6]<100)) break;
+        if((sscanf(buffer," %d", &game_targets[5])==1)&&(0<game_targets[5]&&game_targets[5]<100)) break;
         else (printf("Verifica os valores introduzidos\n"));
     }
 
@@ -962,8 +984,50 @@ void RadialDotCheck(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos
     }
 }
 
-void ResetGameStats(int game_stats[6]){
+void SetGameStats(int game_stats[6], int game_targets[6]){
     for(int i=0; i<6; i++){
-        game_stats[i]=0;
+        game_stats[i]=game_targets[i];
+    }
+}
+
+void RenderStats( SDL_Renderer* _renderer, TTF_Font *_font1, int _game_stats[], int _ncolors, int _moves, char convToDisplay[], int state, int current_selected[TABLE_SIZE][3],
+                    int num_selected, int flag_square){
+    SDL_Color black={0,0,0};
+    SDL_Rect stats_boxes;
+
+    stats_boxes.x=(TABLE_SIZE/2)-((130*(_ncolors)+100)/2);
+    stats_boxes.y=77;
+    stats_boxes.w=100;
+    stats_boxes.h=61;
+
+    int dotsize;
+    printf("%d -- %d\n", stats_boxes.x, stats_boxes.y);
+
+    for(int i=0; i<=_ncolors;i++){
+
+
+
+        SDL_SetRenderDrawColor( _renderer, 240, 240 , 240, 240 );
+        SDL_RenderFillRect(_renderer, &stats_boxes);
+
+        if (i==0){
+            sprintf(convToDisplay, "%d", _game_stats[5]);
+            RenderText(stats_boxes.x+30, stats_boxes.y+15 , convToDisplay, _font1, &black, _renderer);
+        }
+
+        if (i>0) {
+            sprintf(convToDisplay, "%d", _game_stats[i-1]);
+            RenderText(stats_boxes.x+70, stats_boxes.y+15 , convToDisplay, _font1, &black, _renderer);
+            filledCircleRGBA(_renderer, stats_boxes.x+30, stats_boxes.y+30, 26, colors[0][i-1], colors[1][i-1], colors[2][i-1]);
+            if(current_selected[1][2]==i-1){
+                dotsize=26+num_selected*2;
+                if (flag_square==1) filledCircleRGBA(_renderer, stats_boxes.x+30, stats_boxes.y+30, 100, colors[0][i-1], colors[1][i-1], colors[2][i-1]);
+                filledCircleRGBA(_renderer, stats_boxes.x+30, stats_boxes.y+30, dotsize, colors[0][i-1], colors[1][i-1], colors[2][i-1]);
+            }
+        }
+
+
+        stats_boxes.x+=130;
+        printf("mais alem\n" );
     }
 }
