@@ -57,6 +57,8 @@ int RunOutOfPlays(int [][MAX_BOARD_POS], int, int);
 void InfoDisplayer(int, SDL_Renderer *, TTF_Font *);
 void VictoryOrDefeat(int[], int[], int *, int);
 
+void statsTXT(char [BUFFER_SIZE], int games_counter[3], int stats_vect[TABLE_SIZE]);
+
 //advanced feature
 void Undo(int [][MAX_BOARD_POS],int  [][MAX_BOARD_POS], int[6], int [6], int, int, int);
 void CloneForUndo(int [][MAX_BOARD_POS],int  [][MAX_BOARD_POS], int[6], int [6], int, int, int);
@@ -95,7 +97,7 @@ int main( void ){
     int flag_square=0; //1 if a square is done
     int game_stats[6]= {0}, game_targets[6]={0}; //last cell - nº of plays; others - dots blown per color(color code mantained)
     char convToDisplay[3];
-    int games_init_counter=0;
+    int games_counter[3]={0}, stats_vect[TABLE_SIZE]={0};
     int undo_board[MAX_BOARD_POS][MAX_BOARD_POS]={{0}}, undo_game_stats[6]={0};
 
     // initialize graphics
@@ -114,6 +116,7 @@ int main( void ){
         // while there's events to handle
         while( SDL_PollEvent( &event ) ){
             if( event.type == SDL_QUIT ){
+                statsTXT(player_name, games_counter, stats_vect);
                 quit=1;
             }
 
@@ -123,9 +126,10 @@ int main( void ){
                         InitialBoard(board, board_pos_x, board_pos_y, ncolors);
                         SetGameStats(game_stats, game_targets);
                         state=0;
-                        games_init_counter++;
+                        games_counter[0]++;
                         break;
                     case SDLK_q:
+                        statsTXT(player_name, games_counter, stats_vect);
                         quit=1;
                     case SDLK_u:
                         if (state==0) Undo(board, undo_board, game_stats, undo_game_stats, board_pos_x, board_pos_y, ncolors);
@@ -146,7 +150,7 @@ int main( void ){
 
             else if ( event.type == SDL_MOUSEBUTTONUP ){
                 ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y, board_pos_x, board_pos_y);
-                //printf("Button up: %d %d\n", pt_x, pt_y);
+
                 if (state==0) state=1;
                 pressed=0;
             }
@@ -199,6 +203,14 @@ int main( void ){
         if (state==0){
             if (RunOutOfPlays(board, board_pos_x, board_pos_y)) state=5;
             VictoryOrDefeat(game_stats, game_targets, &state, ncolors);
+            if (state==3){
+                games_counter[1]++;
+                stats_vect[games_counter[0]-1]=game_targets[5]-game_stats[5];
+            }
+            if (state>3){
+                games_counter[2]++;
+                stats_vect[games_counter[0]-1]=-1;
+            }
         }
 
         InfoDisplayer(state, renderer, sans);
@@ -799,7 +811,8 @@ void RemovePoints(int board_size_px[], int _square_size_px, SDL_Renderer *_rende
                 }
 }
 
-void HidePointsToBeRemoved (int board_size_px[], int _square_size_px, SDL_Renderer *_renderer,int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos_y, int current_selected[TABLE_SIZE][3], int state){
+void HidePointsToBeRemoved (int board_size_px[], int _square_size_px, SDL_Renderer *_renderer,int board[][MAX_BOARD_POS], int _board_pos_x,
+                            int _board_pos_y, int current_selected[TABLE_SIZE][3], int state){
     int circleR,coord_x,coord_y,clr;
 
     if (state==2){
@@ -850,7 +863,8 @@ int DotToCoordinate(int  X0Y1,  int board_size_px[], int _square_size_px, int IN
     }
 }
 
-void SinalizePointsToBeDeleted(int board[][MAX_BOARD_POS], int current_selected[TABLE_SIZE][3], int _num_selected, int _board_pos_x, int _board_pos_y, int flag_square, int game_stats[6]){
+void SinalizePointsToBeDeleted(int board[][MAX_BOARD_POS], int current_selected[TABLE_SIZE][3], int _num_selected, int _board_pos_x,
+                                int _board_pos_y, int flag_square, int game_stats[6]){
     int marker=-1;
 
     if (_num_selected==1) return;
@@ -1003,7 +1017,8 @@ void SetGameStats(int game_stats[6], int game_targets[6]){
     }
 }
 
-void RenderStats( SDL_Renderer* _renderer, TTF_Font *_font1, int _game_stats[], int _ncolors, int _moves, char convToDisplay[], int state, int current_selected[TABLE_SIZE][3],
+void RenderStats( SDL_Renderer* _renderer, TTF_Font *_font1, int _game_stats[], int _ncolors, int _moves, char convToDisplay[], int state,
+                    int current_selected[TABLE_SIZE][3],
                     int num_selected, int flag_square){
     SDL_Color black={0,0,0};
     SDL_Rect stats_boxes;
@@ -1041,20 +1056,30 @@ void RenderStats( SDL_Renderer* _renderer, TTF_Font *_font1, int _game_stats[], 
 
 
         stats_boxes.x+=130;
-        
+
     }
 }
 
 
 int RunOutOfPlays(int board[][MAX_BOARD_POS], int board_pos_x, int board_pos_y){
-    for(int i=0; i<board_pos_x-1; i++){
-        for(int j=0; j<board_pos_y-1;j++){
-            if ((board[i][j]==board[i+1][j])||(board[i][j]==board[i][j+1])){
-                return 0;
+    for(int i=0; i<board_pos_x; i++){
+        for(int j=0; j<board_pos_y;j++){
+
+            if ((i==board_pos_x-1)&&(j==board_pos_y-1)) return 1;
+
+            if (j==board_pos_y-1){
+                if (board[i][j]==board[i+1][j]) return 0;
+            }
+
+            else if (i==board_pos_x-1){
+                if (board[i][j]==board[i][j+1]) return 0;
+            }
+
+            else{
+                if ((board[i][j]==board[i+1][j])||(board[i][j]==board[i][j+1])) return 0;
             }
         }
     }
-
     return 1;
 }
 
@@ -1115,7 +1140,6 @@ void VictoryOrDefeat(int game_stats[6], int game_targets[6],int *state, int ncol
 
     if (vict_flag==1){
         *state=3;
-        //game_targets-game_stats
     }
     else if (defeat_flag==1){
         *state = 4;
@@ -1155,5 +1179,43 @@ void Undo(int board[][MAX_BOARD_POS],int  undo_board[][MAX_BOARD_POS], int game_
     }
 
     game_stats[5]=undo_game_stats[5];
+
+}
+
+void statsTXT(char player_name[BUFFER_SIZE], int games_counter[3], int stats_vect[TABLE_SIZE]){
+    FILE *statsfile = fopen("stats.txt", "a");
+
+    if (statsfile
+         == NULL)
+        {
+            printf("Error opening file!\n");
+            exit(1);
+        }
+
+/* print some text
+const char *text = "Write this to the file";
+fprintf(f, "Some text: %s\n", text);
+
+print integers and floats
+int i = 1;
+float py = 3.1415927;
+fprintf(f, "Integer: %d, float: %f\n", i, py);
+
+ printing single chatacters */
+
+
+fprintf(statsfile, "Jogador: %s\n", player_name);
+fprintf(statsfile, "Nº de jogos: %d (%d vitórias e %d derrotas)\n", games_counter[0], games_counter[1], games_counter[2]);
+
+for(int i=0; i<games_counter[0]; i++){
+    if (stats_vect[i]>-1) fprintf(statsfile, "%d V\n", stats_vect[i]);
+    else fprintf(statsfile, "D\n");
+}
+
+fclose(statsfile);
+
+
+
+
 
 }
