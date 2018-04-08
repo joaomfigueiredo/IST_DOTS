@@ -53,6 +53,13 @@ void CleanC_S(int[][3], int);
 void SinalizePointsToBeDeleted(int [][MAX_BOARD_POS], int [TABLE_SIZE][3], int , int, int, int, int[6] );
 void RadialDotCheck(int [][MAX_BOARD_POS], int, int, int [TABLE_SIZE][3], int[6]);
 void SetGameStats(int[6], int[6]);
+int RunOutOfPlays(int [][MAX_BOARD_POS], int, int);
+void InfoDisplayer(int, SDL_Renderer *, TTF_Font *);
+void VictoryOrDefeat(int[], int[], int *, int);
+
+//advanced feature
+void Undo(int [][MAX_BOARD_POS],int  [][MAX_BOARD_POS], int[6], int [6], int, int, int);
+void CloneForUndo(int [][MAX_BOARD_POS],int  [][MAX_BOARD_POS], int[6], int [6], int, int, int);
 
 
 void HidePointsToBeRemoved(int [], int, SDL_Renderer *,int [][MAX_BOARD_POS], int, int, int [TABLE_SIZE][3], int);
@@ -88,6 +95,9 @@ int main( void ){
     int flag_square=0; //1 if a square is done
     int game_stats[6]= {0}, game_targets[6]={0}; //last cell - nº of plays; others - dots blown per color(color code mantained)
     char convToDisplay[3];
+    int games_init_counter=0;
+    int undo_board[MAX_BOARD_POS][MAX_BOARD_POS]={{0}}, undo_game_stats[6]={0};
+
     // initialize graphics
     ParamReading(&board_pos_x, &board_pos_y, player_name ,&ncolors, game_targets);
     InitialBoard(board, board_pos_x, board_pos_y, ncolors);
@@ -97,6 +107,7 @@ int main( void ){
 
     TestPrints(board_pos_x,board_pos_y, player_name, ncolors, game_targets);
 
+    state=-1;
 
     while( quit == 0 )
     {
@@ -111,11 +122,13 @@ int main( void ){
                     case SDLK_n:
                         InitialBoard(board, board_pos_x, board_pos_y, ncolors);
                         SetGameStats(game_stats, game_targets);
+                        state=0;
+                        games_init_counter++;
                         break;
                     case SDLK_q:
                         quit=1;
                     case SDLK_u:
-                        // todo
+                        if (state==0) Undo(board, undo_board, game_stats, undo_game_stats, board_pos_x, board_pos_y, ncolors);
                     default:
                         break;
                 }
@@ -124,14 +137,17 @@ int main( void ){
             else if ( event.type == SDL_MOUSEBUTTONDOWN ){
                 ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y, board_pos_x, board_pos_y);
                 //printf("Button down: %d %d\n", pt_x, pt_y);
-                pressed=1;
-                CurrentMove(pt_x, pt_y,current_selected,board,&num_selected, &flag_square);
+                if (state==0){
+                    pressed=1;
+                    CloneForUndo(board, undo_board, game_stats, undo_game_stats, board_pos_x, board_pos_y, ncolors);
+                    CurrentMove(pt_x, pt_y,current_selected,board,&num_selected, &flag_square);
+                }
             }
 
             else if ( event.type == SDL_MOUSEBUTTONUP ){
                 ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y, board_pos_x, board_pos_y);
                 //printf("Button up: %d %d\n", pt_x, pt_y);
-                state=1;
+                if (state==0) state=1;
                 pressed=0;
             }
 
@@ -150,23 +166,17 @@ int main( void ){
         RenderPoints(board, board_pos_x, board_pos_y, board_size_px, square_size_px, renderer);
 
         if (state==2){
+
             //as state==2 this function paint the spaces left blank after the descent of the points
             HidePointsToBeRemoved(board_size_px, square_size_px, renderer,board, board_pos_x, board_pos_y, current_selected, state);
             //fills with a color number the negative cells of the matrix
             FreshNewPoints(board, board_pos_x,board_pos_y, ncolors);
             SDL_Delay(delay);
-
-
-
             state=0;
-            if (num_selected>1) game_stats[5]++;
-
-
+            if (num_selected>1) game_stats[5]--;
             for (int o=0; o<6;o++){
                 printf("game_stats __%d__[%d]\n",o, game_stats[o] );
-
             }
-
             num_selected=0;
         }
 
@@ -186,7 +196,12 @@ int main( void ){
 
         }
 
+        if (state==0){
+            if (RunOutOfPlays(board, board_pos_x, board_pos_y)) state=5;
+            VictoryOrDefeat(game_stats, game_targets, &state, ncolors);
+        }
 
+        InfoDisplayer(state, renderer, sans);
         RenderStats(renderer, sans, game_stats, ncolors, num_selected, convToDisplay, state, current_selected, num_selected, flag_square);
         // render in the screen all changes above
         SDL_RenderPresent(renderer);
@@ -358,7 +373,7 @@ int RenderTable( int _board_pos_x, int _board_pos_y, int _board_size_px[],
         TTF_Font *_font, SDL_Surface *_img[], SDL_Renderer* _renderer, char player_name[] ){
 
     SDL_Color black = { 0, 0, 0 }; // black
-    SDL_Color light = { 240, 240, 240 };
+    SDL_Color light = { 240, 240, 240, 255 };
     SDL_Color dark = { 120, 110, 102 };
     SDL_Texture *table_texture;
     SDL_Rect tableSrc, tableDest, board, board_square;
@@ -531,7 +546,7 @@ void InitEverything(int width, int height, TTF_Font **_font, TTF_Font **_font1, 
         exit(EXIT_FAILURE);
     }
     // this opens (loads) a NEW font file and sets a size
-    *_font1 = TTF_OpenFont("OpenSans.ttf", 22);
+    *_font1 = TTF_OpenFont("OpenSans.ttf", 30);
     if(!*_font1)
     {
         printf("TTF_OpenFont: %s\n", TTF_GetError());
@@ -719,32 +734,30 @@ void CurrentMove(int _pt_x,int _pt_y,int current_selected[TABLE_SIZE][3],int _bo
 //verifica se deve ligar os pontos
 int YNconnect(int *ptrnum_selected, int current_selected[TABLE_SIZE][3], int board[][MAX_BOARD_POS], int _pt_x, int _pt_y, int *ptrflag_square){
     if ((_pt_x)==-1) return 0;
-    //verifica se são consecutivos e garante que não interefere com o fundo
+
     if ((current_selected[*ptrnum_selected-2][0]==_pt_x)&&(current_selected[*ptrnum_selected-2][1]==_pt_y)){
         *ptrflag_square=0;
+
         *ptrnum_selected=*ptrnum_selected-2;
+
         if (*ptrnum_selected<1) *ptrnum_selected=0;
-
-
 
         return 1;
     }
 
     if ((*ptrflag_square)==1) return 0;
 
-    for (int i=0; i<*ptrnum_selected;i++){
-        if (((current_selected[i][0]==_pt_x)&&(current_selected[i][1]==_pt_y))&&((*ptrnum_selected-1)!=i)){
-            current_selected[CROSSING_POINT][0]=i;
-            *ptrflag_square=1;
-            break;
-        }
-    }
-
     if ((_pt_x!=-1 && _pt_y!=-1)&&(((abs(current_selected[*ptrnum_selected-1][0]-_pt_x)==1)&&(abs(current_selected[*ptrnum_selected-1][1]-_pt_y)==0)) xor ((abs(current_selected[*ptrnum_selected-1][1]-_pt_y)==1)&&(abs(current_selected[*ptrnum_selected-1][0]-_pt_x))==0))){
         //verifca se sao da mesma cor
         if ((current_selected[*ptrnum_selected-1][2]) == board[_pt_x][_pt_y]){
             //se o cursor recuar para os pontos sucessivamente anteriores esquece-os
-
+            for (int i=0; i<*ptrnum_selected;i++){
+                if (((current_selected[i][0]==_pt_x)&&(current_selected[i][1]==_pt_y))&&((*ptrnum_selected-1)!=i)){
+                    current_selected[CROSSING_POINT][0]=i;
+                    *ptrflag_square=1;
+                    break;
+                }
+            }
 
             return 1;
         }
@@ -842,7 +855,7 @@ void SinalizePointsToBeDeleted(int board[][MAX_BOARD_POS], int current_selected[
 
     if (_num_selected==1) return;
 
-    game_stats[current_selected[0][2]]+=_num_selected;
+    game_stats[current_selected[0][2]]-=_num_selected;
 
     for(int i=0; i<_num_selected;i++){
 
@@ -860,7 +873,7 @@ void SinalizePointsToBeDeleted(int board[][MAX_BOARD_POS], int current_selected[
                 if(board[j][k]==current_selected[0][2]){
 
                     board[j][k]=-1;
-                    game_stats[current_selected[0][2]]++;
+                    game_stats[current_selected[0][2]]--;
                 }
             }
         }
@@ -1001,7 +1014,6 @@ void RenderStats( SDL_Renderer* _renderer, TTF_Font *_font1, int _game_stats[], 
     stats_boxes.h=61;
 
     int dotsize;
-    printf("%d -- %d\n", stats_boxes.x, stats_boxes.y);
 
     for(int i=0; i<=_ncolors;i++){
 
@@ -1012,12 +1024,13 @@ void RenderStats( SDL_Renderer* _renderer, TTF_Font *_font1, int _game_stats[], 
 
         if (i==0){
             sprintf(convToDisplay, "%d", _game_stats[5]);
-            RenderText(stats_boxes.x+30, stats_boxes.y+15 , convToDisplay, _font1, &black, _renderer);
+            RenderText(stats_boxes.x+25, stats_boxes.y+10 , convToDisplay, _font1, &black, _renderer);
         }
 
         if (i>0) {
             sprintf(convToDisplay, "%d", _game_stats[i-1]);
-            RenderText(stats_boxes.x+70, stats_boxes.y+15 , convToDisplay, _font1, &black, _renderer);
+            if (_game_stats[i-1]<0) sprintf(convToDisplay, "%d", 0);
+            RenderText(stats_boxes.x+65, stats_boxes.y+10 , convToDisplay, _font1, &black, _renderer);
             filledCircleRGBA(_renderer, stats_boxes.x+30, stats_boxes.y+30, 26, colors[0][i-1], colors[1][i-1], colors[2][i-1]);
             if(current_selected[1][2]==i-1){
                 dotsize=26+num_selected*2;
@@ -1028,6 +1041,119 @@ void RenderStats( SDL_Renderer* _renderer, TTF_Font *_font1, int _game_stats[], 
 
 
         stats_boxes.x+=130;
-        printf("mais alem\n" );
+        
     }
+}
+
+
+int RunOutOfPlays(int board[][MAX_BOARD_POS], int board_pos_x, int board_pos_y){
+    for(int i=0; i<board_pos_x-1; i++){
+        for(int j=0; j<board_pos_y-1;j++){
+            if ((board[i][j]==board[i+1][j])||(board[i][j]==board[i][j+1])){
+                return 0;
+            }
+        }
+    }
+
+    return 1;
+}
+
+void InfoDisplayer(int state, SDL_Renderer* _renderer, TTF_Font *_font1){
+
+    SDL_Rect translucid_background;
+    SDL_Color black={0,0,0};
+
+    translucid_background.x=180;
+    translucid_background.y=360;
+    translucid_background.w=500;
+    translucid_background.h=307;
+
+    if (state==-1){
+        SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor( _renderer, 240, 240 , 240, 180 );
+        SDL_RenderFillRect(_renderer, &translucid_background);
+        RenderText(translucid_background.x+40, translucid_background.y+130 , "CLIQUE 'N' PARA COMEÇAR", _font1, &black, _renderer);
+
+    }
+
+    if(state==3){
+        SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor( _renderer, 240, 240 , 240, 180 );
+        SDL_RenderFillRect(_renderer, &translucid_background);
+        RenderText(translucid_background.x+130, translucid_background.y+115 , "GANHASTE!", _font1, &black, _renderer);
+        RenderText(translucid_background.x+25, translucid_background.y+150 , "CLIQUE 'N' PARA UM NOVO JOGO", _font1, &black, _renderer);
+    }
+
+    if(state==4){
+        SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor( _renderer, 240, 240 , 240, 180 );
+        SDL_RenderFillRect(_renderer, &translucid_background);
+        RenderText(translucid_background.x+130, translucid_background.y+115 , "PERDESTE!", _font1, &black, _renderer);
+        RenderText(translucid_background.x+25, translucid_background.y+150 , "CLIQUE 'N' PARA UM NOVO JOGO", _font1, &black, _renderer);
+    }
+
+    if (state==5){
+        SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor( _renderer, 240, 240 , 240, 180 );
+        SDL_RenderFillRect(_renderer, &translucid_background);
+        RenderText(translucid_background.x+25, translucid_background.y+115 , "ESGOTOU AS JOGADAS POSSIVEIS", _font1, &black, _renderer);
+        RenderText(translucid_background.x+25, translucid_background.y+150 , "CLIQUE 'N' PARA UM NOVO JOGO", _font1, &black, _renderer);
+
+    }
+}
+
+void VictoryOrDefeat(int game_stats[6], int game_targets[6],int *state, int ncolors){
+    int vict_flag=0, defeat_flag=0;
+
+    for(int i=0; i<ncolors; i++){
+        if (game_stats[i]>0) break;
+        if (i==ncolors-1) vict_flag=1;
+    }
+    if (game_stats[5]<1){
+        defeat_flag=1;
+    }
+
+    if (vict_flag==1){
+        *state=3;
+        //game_targets-game_stats
+    }
+    else if (defeat_flag==1){
+        *state = 4;
+
+    }
+    else ;
+}
+
+
+void CloneForUndo(int board[][MAX_BOARD_POS],int  undo_board[][MAX_BOARD_POS], int game_stats[6], int undo_game_stats[6], int board_pos_x, int board_pos_y, int ncolors){
+
+    for(int i=0; i<board_pos_x; i++){
+        for(int j=0; j<board_pos_y;j++){
+            undo_board[i][j]=board[i][j];
+        }
+    }
+
+    for(int k=0; k<ncolors; k++){
+        undo_game_stats[k]=game_stats[k];
+    }
+
+    undo_game_stats[5]=game_stats[5];
+
+}
+
+
+void Undo(int board[][MAX_BOARD_POS],int  undo_board[][MAX_BOARD_POS], int game_stats[6], int undo_game_stats[6], int board_pos_x, int board_pos_y, int ncolors){
+
+    for(int i=0; i<board_pos_x; i++){
+        for(int j=0; j<board_pos_y;j++){
+            board[i][j]=undo_board[i][j];
+        }
+    }
+
+    for(int k=0; k<ncolors; k++){
+        game_stats[k]=undo_game_stats[k];
+    }
+
+    game_stats[5]=undo_game_stats[5];
+
 }
