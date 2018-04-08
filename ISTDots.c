@@ -1,3 +1,11 @@
+/*************************************************
+Project: ISTDOTS game [Projeto Intermédio de Programação]
+Subject: Programação (2nd semestre, 1st year)(MEEC)
+Professor: João Ascenso
+Student: João Miguel Mendes Figueiredo, 90108
+Date: April 2018
+**************************************************/
+
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_image.h>
@@ -24,6 +32,14 @@
 #define MARGIN 5
 #define CROSSING_POINT 501    // adress of current_selected[][] in wich is saved point were the square is closed
 #define BUFFER_SIZE 100  //size of buffer read from stdin
+//for better understanding of the pseudo states machine
+#define BEFORESTARTN -1
+#define WAITING_PLAYING 0
+#define DELETING_DOTS 1
+#define GENERATING_DOTS 2
+#define WON 3
+#define LOST 4
+#define NOMORE_MOVES 5
 
 
 // declaration of the functions related to graphical issues
@@ -37,43 +53,42 @@ int RenderLogo(int, int, SDL_Surface *, SDL_Renderer *);
 int RenderTable(int, int, int [], TTF_Font *, SDL_Surface **, SDL_Renderer *, char[]);
 void ProcessMouseEvent(int , int , int [], int , int *, int *, int, int );
 void RenderPoints(int [][MAX_BOARD_POS], int, int, int [], int, SDL_Renderer *);
-void RenderStats( SDL_Renderer *, TTF_Font *, int [], int , int, char[], int, int [TABLE_SIZE][3], int, int);
+void RenderStats( SDL_Renderer *, TTF_Font *, int [], int , char[], int, int [TABLE_SIZE][3], int, int);
 void filledCircleRGBA(SDL_Renderer * , int , int , int , int , int , int );
 
 //definition of the functions that give a purpose to the graphics
 void ParamReading(int *, int *, char[] , int *, int[]);
-void TestPrints(int, int , char[], int, int[]);
 void InitialBoard(int[][MAX_BOARD_POS], int, int, int);
 void CurrentMove(int, int,int[TABLE_SIZE][3],int[][MAX_BOARD_POS], int *, int *);
 int  YNconnect(int*, int[TABLE_SIZE][3],int[][MAX_BOARD_POS], int, int, int*);
 int DotToCoordinate(int,  int [], int, int);
-void MovePoints(int [][MAX_BOARD_POS], int [TABLE_SIZE][3], int , int , int, int);
+void MovePoints(int [][MAX_BOARD_POS], int [TABLE_SIZE][3], int , int , int);
 void FreshNewPoints(int [][MAX_BOARD_POS], int , int,int);
 void CleanC_S(int[][3], int);
 void SinalizePointsToBeDeleted(int [][MAX_BOARD_POS], int [TABLE_SIZE][3], int , int, int, int, int[6] );
 void RadialDotCheck(int [][MAX_BOARD_POS], int, int, int [TABLE_SIZE][3], int[6]);
-void SetGameStats(int[6], int[6]);
+void SetGameGoals(int[6], int[6]);
 int RunOutOfPlays(int [][MAX_BOARD_POS], int, int);
 void InfoDisplayer(int, SDL_Renderer *, TTF_Font *);
 void VictoryOrDefeat(int[], int[], int *, int);
-
 void statsTXT(char [BUFFER_SIZE], int games_counter[3], int stats_vect[TABLE_SIZE]);
+void HidePointsToBeRemoved(int [], int, SDL_Renderer *,int [][MAX_BOARD_POS], int, int, int [TABLE_SIZE][3], int);
+void RenderPath(SDL_Renderer *, int, int[TABLE_SIZE][3],int, int []);
 
 //advanced feature
 void Undo(int [][MAX_BOARD_POS],int  [][MAX_BOARD_POS], int[6], int [6], int, int, int);
 void CloneForUndo(int [][MAX_BOARD_POS],int  [][MAX_BOARD_POS], int[6], int [6], int, int, int);
 
 
-void HidePointsToBeRemoved(int [], int, SDL_Renderer *,int [][MAX_BOARD_POS], int, int, int [TABLE_SIZE][3], int);
-void RenderPath(SDL_Renderer *, int, int[TABLE_SIZE][3],int, int []);
-void RemovePoints(int [], int, SDL_Renderer *, int, int[TABLE_SIZE][3]);
 // definition of some strings: they cannot be changed when the program is executed !
 const char myName[] = "Joao Figueiredo";
 const char myNumber[] = "IST190108";
 const int colors[3][MAX_COLORS] = {{140, 231, 140, 231, 153},{189, 90, 231, 222, 90},{254, 74, 148, 41, 180}};
 /**
- * main function: entry point of the program
- * only to invoke other functions !
+ MUST_READ
+    In order of making the game actions run smoothly, sequentialy and avoid the dots teleportation effect a pseudo-states-machine
+    was created in main. So, the functions are caled accordingly with state in wich the machine is. to understand it the defines
+    play an important role (as the name of the constants summarizes the state corresponding)
  */
 int main( void ){
     SDL_Window *window = NULL;
@@ -92,47 +107,45 @@ int main( void ){
     int pt_x = 0, pt_y = 0;
     char player_name[BUFFER_SIZE];
     int ncolors=MAX_COLORS;
-    int current_selected[TABLE_SIZE][3]= {{-1}}, pressed=0,num_selected=0; //(in order)coordinates and color of dots selected , state of the mouse button, number of dots selected
-    int state=0; // state0 -reading or waiting, state1 - removing dots, state2 - adding dots
+    //(in order)coordinates and color of dots selected([][0]-X;[][1]-Y;[][2]-color code) , state of the mouse button
+    //(up=0;down=1), number of dots selected
+    int current_selected[TABLE_SIZE][3]= {{-1}}, pressed=0,num_selected=0;
+    int state=0; // Read MUST_READ some lines above
     int flag_square=0; //1 if a square is done
-    int game_stats[6]= {0}, game_targets[6]={0}; //last cell - nº of plays; others - dots blown per color(color code mantained)
-    char convToDisplay[3];
-    int games_counter[3]={0}, stats_vect[TABLE_SIZE]={0};
-    int undo_board[MAX_BOARD_POS][MAX_BOARD_POS]={{0}}, undo_game_stats[6]={0};
-
+    int game_goals[6]= {0}, user_goals[6]={0}; //last cell - nº of plays; others - dots blown per color(color code corresponds to array position)
+    char convToDisplay[3]; //auxiliar var. used in RenderStats
+    int games_counter[3]={0}, stats_vect[TABLE_SIZE]={0};//(in order) [0]-nº of games;[1]-nº of victories; [2]-nº of defeats
+    int undo_board[MAX_BOARD_POS][MAX_BOARD_POS]={{0}}, undo_game_goals[6]={0}; //clones of current values to perform undo of a play
     // initialize graphics
-    ParamReading(&board_pos_x, &board_pos_y, player_name ,&ncolors, game_targets);
+    ParamReading(&board_pos_x, &board_pos_y, player_name ,&ncolors, user_goals);
     InitialBoard(board, board_pos_x, board_pos_y, ncolors);
-
-
     InitEverything(width, height, &serif, &sans, imgs, &window, &renderer);
 
-    TestPrints(board_pos_x,board_pos_y, player_name, ncolors, game_targets);
-
-    state=-1;
+    state=BEFORESTARTN;//remains unplayable until the press of 'n'
 
     while( quit == 0 )
     {
         // while there's events to handle
         while( SDL_PollEvent( &event ) ){
             if( event.type == SDL_QUIT ){
-                statsTXT(player_name, games_counter, stats_vect);
+                statsTXT(player_name, games_counter, stats_vect);//records stats right before exit
                 quit=1;
             }
 
             else if ( event.type == SDL_KEYDOWN ){
                 switch ( event.key.keysym.sym ){
                     case SDLK_n:
-                        InitialBoard(board, board_pos_x, board_pos_y, ncolors);
-                        SetGameStats(game_stats, game_targets);
-                        state=0;
+                        InitialBoard(board, board_pos_x, board_pos_y, ncolors);//renders new colors
+                        SetGameGoals(game_goals, user_goals);
+                        state=WAITING_PLAYING;//ready to play
                         games_counter[0]++;
                         break;
                     case SDLK_q:
-                        statsTXT(player_name, games_counter, stats_vect);
+                        statsTXT(player_name, games_counter, stats_vect);//records stats right before exit
                         quit=1;
                     case SDLK_u:
-                        if (state==0) Undo(board, undo_board, game_stats, undo_game_stats, board_pos_x, board_pos_y, ncolors);
+                        //if in game, undo!
+                        if (state==WAITING_PLAYING) Undo(board, undo_board, game_goals, undo_game_goals, board_pos_x, board_pos_y, ncolors);
                     default:
                         break;
                 }
@@ -140,27 +153,23 @@ int main( void ){
 
             else if ( event.type == SDL_MOUSEBUTTONDOWN ){
                 ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y, board_pos_x, board_pos_y);
-                //printf("Button down: %d %d\n", pt_x, pt_y);
-                if (state==0){
+                if (state==WAITING_PLAYING){
                     pressed=1;
-                    CloneForUndo(board, undo_board, game_stats, undo_game_stats, board_pos_x, board_pos_y, ncolors);
+                    //clones for UNDO right before the start of a new play
+                    CloneForUndo(board, undo_board, game_goals, undo_game_goals, board_pos_x, board_pos_y, ncolors);
                     CurrentMove(pt_x, pt_y,current_selected,board,&num_selected, &flag_square);
                 }
             }
 
             else if ( event.type == SDL_MOUSEBUTTONUP ){
                 ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y, board_pos_x, board_pos_y);
-
-                if (state==0) state=1;
+                if (state==WAITING_PLAYING) state=DELETING_DOTS;
                 pressed=0;
             }
 
             else if ( event.type == SDL_MOUSEMOTION ){
-            //    printf("NUMEROCORES[%d]\n",ncolors );
                 ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y,board_pos_x, board_pos_y);
-                //printf("Moving Mouse: %d %d\n", pt_x, pt_y);
                 if (pressed==1) CurrentMove(pt_x, pt_y,current_selected, board, &num_selected, &flag_square);
-
             }
         }
 
@@ -169,52 +178,51 @@ int main( void ){
         // render board
         RenderPoints(board, board_pos_x, board_pos_y, board_size_px, square_size_px, renderer);
 
-        if (state==2){
-
+        if (state==GENERATING_DOTS){
             //as state==2 this function paint the spaces left blank after the descent of the points
             HidePointsToBeRemoved(board_size_px, square_size_px, renderer,board, board_pos_x, board_pos_y, current_selected, state);
             //fills with a color number the negative cells of the matrix
             FreshNewPoints(board, board_pos_x,board_pos_y, ncolors);
-            SDL_Delay(delay);
-            state=0;
-            if (num_selected>1) game_stats[5]--;
-            for (int o=0; o<6;o++){
-                printf("game_stats __%d__[%d]\n",o, game_stats[o] );
-            }
+            SDL_Delay(500);//to smooth visual understanding
+            state=WAITING_PLAYING;
             num_selected=0;
         }
 
-        if (state==1) {
+        if (state==DELETING_DOTS) {
             //Set points selected to -1. if a square is made sets the points of the square to -2, those inside to -3, and all others of the same color to -1
-            SinalizePointsToBeDeleted(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square, game_stats);
+            SinalizePointsToBeDeleted(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square, game_goals);
             //paints the dots about to be removed with the background color
             HidePointsToBeRemoved(board_size_px, square_size_px, renderer,board, board_pos_x, board_pos_y, current_selected, state);
             //simulates gravity
-            MovePoints(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square);
-            state++;
-            SDL_Delay(delay);
+            MovePoints(board, current_selected, num_selected, board_pos_x, board_pos_y);
+            state=GENERATING_DOTS;
+            SDL_Delay(500);//to smooth visual understanding
         }
-
+        //renders path in WAITING_PLAYING and DELETING_DOTS states
         if (state<2){
             RenderPath(renderer, num_selected,current_selected,square_size_px, board_size_px);
-
         }
 
-        if (state==0){
-            if (RunOutOfPlays(board, board_pos_x, board_pos_y)) state=5;
-            VictoryOrDefeat(game_stats, game_targets, &state, ncolors);
-            if (state==3){
+        //check end of a game
+        if (state==WAITING_PLAYING){
+            if (RunOutOfPlays(board, board_pos_x, board_pos_y)) state=NOMORE_MOVES;
+
+            VictoryOrDefeat(game_goals, user_goals, &state, ncolors);
+
+            if (state==WON){
                 games_counter[1]++;
-                stats_vect[games_counter[0]-1]=game_targets[5]-game_stats[5];
+                stats_vect[games_counter[0]-1]=user_goals[5]-game_goals[5];
             }
+            //LOST OR NOMORE_MOVES
             if (state>3){
                 games_counter[2]++;
                 stats_vect[games_counter[0]-1]=-1;
             }
         }
-
+        //display info messanges in the board
         InfoDisplayer(state, renderer, sans);
-        RenderStats(renderer, sans, game_stats, ncolors, num_selected, convToDisplay, state, current_selected, num_selected, flag_square);
+        //prints the stats in the top of the window
+        RenderStats(renderer, sans, game_goals, ncolors, convToDisplay, state, current_selected, num_selected, flag_square);
         // render in the screen all changes above
         SDL_RenderPresent(renderer);
         //sets all the cells of current_selected not in use to -1
@@ -265,7 +273,7 @@ void ProcessMouseEvent(int _mouse_pos_x, int _mouse_pos_y, int _board_size_px[],
     _mouse_pos_x = _mouse_pos_x - x_corner;
     _mouse_pos_y = _mouse_pos_y - y_corner;
 
-    //verifica se o rato esta contido nalgum dos circulos (se for o caso identifica as suas coordenadas ja processadas)
+    //verifies if the mouse pointer is whitin any dot. if so records its 'processed' cooordinates
     int CircRadius,centerCircX,centerCircY, distancetoPointCenter;
 
     for ( int i = 0; i < _board_pos_x; i++ )
@@ -356,18 +364,6 @@ void filledCircleRGBA(SDL_Renderer * _renderer, int _circleX, int _circleY, int 
     }
 }
 
-/*
- * Shows some information about the game:
- * - Goals of the game
- * - Number of moves
- * \param _renderer renderer to handle all rendering in a window
- * \param _font font to display the scores
- * \param _goals goals of the game
- * \param _ncolors number of colors
- * \param _moves number of moves remaining
- */
-
-
 /**
  * RenderTable: Draws the table where the game will be played, namely:
  * -  some texture for the background
@@ -386,9 +382,9 @@ int RenderTable( int _board_pos_x, int _board_pos_y, int _board_size_px[],
 
     SDL_Color black = { 0, 0, 0 }; // black
     SDL_Color light = { 240, 240, 240, 255 };
-    SDL_Color dark = { 120, 110, 102 };
+    //SDL_Color dark = { 120, 110, 102 };
     SDL_Texture *table_texture;
-    SDL_Rect tableSrc, tableDest, board, board_square;
+    SDL_Rect tableSrc, tableDest, board/*, board_square*/;
     int height, board_size, square_size_px, max_pos;
 
     // set color of renderer to some color
@@ -441,7 +437,7 @@ int RenderTable( int _board_pos_x, int _board_pos_y, int _board_size_px[],
 
 
     // iterate over all squares
-    for ( int i = 0; i < _board_pos_x; i++ )
+    /*for ( int i = 0; i < _board_pos_x; i++ )
     {
         for ( int j = 0; j < _board_pos_y; j++ )
         {
@@ -449,9 +445,9 @@ int RenderTable( int _board_pos_x, int _board_pos_y, int _board_size_px[],
             board_square.y = board.y + (j+1)*SQUARE_SEPARATOR + j*square_size_px;
             board_square.w = square_size_px;
             board_square.h = square_size_px;
-        //    SDL_RenderFillRect(_renderer, &board_square);
+           SDL_RenderFillRect(_renderer, &board_square);
         }
-    }
+    }*/
 
     // destroy everything
     SDL_DestroyTexture(table_texture);
@@ -636,7 +632,12 @@ SDL_Renderer* CreateRenderer(int width, int height, SDL_Window *_window){
     return renderer;
 }
 
-void ParamReading(int *_board_pos_x, int *_board_pos_y, char player_name[] ,int *_ncolors, int game_targets[]){
+/**
+ * Reads the user goals. Takes entries with caution to pervent the program from
+ * crashing due to an unsuported value. While cicles make sure that if the user
+ * doesn't respect the conditions also doesn't have to reintroduce all parameters again.
+ */
+void ParamReading(int *_board_pos_x, int *_board_pos_y, char player_name[] ,int *_ncolors, int user_goals[]){
     char buffer[BUFFER_SIZE];
 
     while(1){
@@ -691,7 +692,7 @@ void ParamReading(int *_board_pos_x, int *_board_pos_y, char player_name[] ,int 
                     break;
             }
             if(fgets(buffer, BUFFER_SIZE, stdin)==NULL) exit(-1);
-            if((sscanf(buffer," %d", &game_targets[i])==1)&&(0<game_targets[i]&&game_targets[i]<100)) break;
+            if((sscanf(buffer," %d", &user_goals[i])==1)&&(0<user_goals[i]&&user_goals[i]<100)) break;
             else (printf("Objetivos entre 1 e 99 (inclusive).\n"));
         }
     }
@@ -699,7 +700,7 @@ void ParamReading(int *_board_pos_x, int *_board_pos_y, char player_name[] ,int 
     while(1){
         printf("Numero de movimentos(ate 99): ");
         if(fgets(buffer, BUFFER_SIZE, stdin)==NULL) exit(-1);
-        if((sscanf(buffer," %d", &game_targets[5])==1)&&(0<game_targets[5]&&game_targets[5]<100)) break;
+        if((sscanf(buffer," %d", &user_goals[5])==1)&&(0<user_goals[5]&&user_goals[5]<100)) break;
         else (printf("Verifica os valores introduzidos\n"));
     }
 
@@ -707,15 +708,9 @@ void ParamReading(int *_board_pos_x, int *_board_pos_y, char player_name[] ,int 
 
 }
 
-//to be deleted
-void TestPrints(int board_pos_x, int board_pos_y, char player_name[] ,int ncolors, int game_targets[]){
-
-        printf("%d %d %s %d aqui %d\n", board_pos_x, board_pos_y, player_name, ncolors, game_targets[0]);
-        for(int i=0;i<6;i++){
-            printf("%d",game_targets[i]);
-        }
-}
-
+/**
+ * randomizes color numbers to fulfill the entire game matrix
+ */
 void InitialBoard(int board[][MAX_BOARD_POS], int board_pos_x, int board_pos_y, int ncolors) {
     srand(time(NULL));
     for ( int i=0; i<board_pos_x;i++){
@@ -725,6 +720,11 @@ void InitialBoard(int board[][MAX_BOARD_POS], int board_pos_x, int board_pos_y, 
     }
 }
 
+/**
+ * saves the current move to an array
+ * @current_selected[TABLE_SIZE][3] dots where the move went through (2nd dim.: 0-X,1-Y,2-COlorCode)
+ * @param ptrnum_selected keeps on track the num of dots selected
+ */
 void CurrentMove(int _pt_x,int _pt_y,int current_selected[TABLE_SIZE][3],int _board[][MAX_BOARD_POS], int *ptrnum_selected, int *ptrflag_square){
     if ((*ptrnum_selected==0)&&(_pt_x!=-1&&_pt_y!=-1)){
         current_selected[0][0]=_pt_x;
@@ -733,6 +733,7 @@ void CurrentMove(int _pt_x,int _pt_y,int current_selected[TABLE_SIZE][3],int _bo
         *ptrnum_selected=1;
         *ptrflag_square=0;
     }
+
     else if(YNconnect(ptrnum_selected, current_selected,_board, _pt_x, _pt_y, ptrflag_square)==1){
         current_selected[*ptrnum_selected][0]=_pt_x;
         current_selected[*ptrnum_selected][1]=_pt_y;
@@ -740,29 +741,34 @@ void CurrentMove(int _pt_x,int _pt_y,int current_selected[TABLE_SIZE][3],int _bo
         *ptrnum_selected=*ptrnum_selected+1;
     }
 
-    else        ;
 }
 
-//verifica se deve ligar os pontos
+/**
+ * Connect or Not Connect? That is the question solved here
+ * it does the necessary verification to validate or deny
+ * the moves. through the functions this verifications are commented
+ * although the verifications may appear in a odd order it's an important detail
+ * to assure a better speed execution
+ * @return                 1 - Connect, 0 - Not connect
+ */
 int YNconnect(int *ptrnum_selected, int current_selected[TABLE_SIZE][3], int board[][MAX_BOARD_POS], int _pt_x, int _pt_y, int *ptrflag_square){
+    //guarentees that is not connecting with interstices
     if ((_pt_x)==-1) return 0;
-
-    if ((current_selected[*ptrnum_selected-2][0]==_pt_x)&&(current_selected[*ptrnum_selected-2][1]==_pt_y)){
+    //checks i the user is returning by path he made, unselecting dots
+    if ((*ptrnum_selected>1)&&(current_selected[*ptrnum_selected-2][0]==_pt_x)&&(current_selected[*ptrnum_selected-2][1]==_pt_y)){
         *ptrflag_square=0;
-
         *ptrnum_selected=*ptrnum_selected-2;
-
         if (*ptrnum_selected<1) *ptrnum_selected=0;
-
         return 1;
     }
-
+    //if a square is closed the play is terminated (no point checking further then)
     if ((*ptrflag_square)==1) return 0;
-
-    if ((_pt_x!=-1 && _pt_y!=-1)&&(((abs(current_selected[*ptrnum_selected-1][0]-_pt_x)==1)&&(abs(current_selected[*ptrnum_selected-1][1]-_pt_y)==0)) xor ((abs(current_selected[*ptrnum_selected-1][1]-_pt_y)==1)&&(abs(current_selected[*ptrnum_selected-1][0]-_pt_x))==0))){
-        //verifca se sao da mesma cor
+    //observes if the dot is contiguos to the previous one (xor operand avoids that diagonal points are linked)
+    if (((abs(current_selected[*ptrnum_selected-1][0]-_pt_x)==1)&&(abs(current_selected[*ptrnum_selected-1][1]-_pt_y)==0)) xor
+            ((abs(current_selected[*ptrnum_selected-1][1]-_pt_y)==1)&&(abs(current_selected[*ptrnum_selected-1][0]-_pt_x))==0)){
+        //assures that the dots share colors
         if ((current_selected[*ptrnum_selected-1][2]) == board[_pt_x][_pt_y]){
-            //se o cursor recuar para os pontos sucessivamente anteriores esquece-os
+            //if linking to a dot already in the path means that a 'square' was closed
             for (int i=0; i<*ptrnum_selected;i++){
                 if (((current_selected[i][0]==_pt_x)&&(current_selected[i][1]==_pt_y))&&((*ptrnum_selected-1)!=i)){
                     current_selected[CROSSING_POINT][0]=i;
@@ -778,18 +784,21 @@ int YNconnect(int *ptrnum_selected, int current_selected[TABLE_SIZE][3], int boa
     else return 0;
 }
 
+/**
+ * colecting the cells of board selected from current_selected
+ * and converting matrix coordinates to window pixels coordinates
+ * (with DotToCoordinate function) draws a line beetween them
+*/
 void RenderPath(SDL_Renderer* _renderer, int _num_selected, int current_selected[TABLE_SIZE][3], int _square_size_px,int board_size_px[2]){
-
         int x1, x2, y1, y2,clr, thickness;
         //assures that the the thickness of the linker as a constant proportion to the dots size
         thickness=_square_size_px*0.1;
         for(int j=-thickness; j<thickness;j++){
             for (int i=0; i<_num_selected-1;i++){
-                x1 = DotToCoordinate(0, board_size_px, _square_size_px,current_selected[i][0])+j;// * (_square_size_px + SQUARE_SEPARATOR)+200;
-                y1 = DotToCoordinate(1, board_size_px, _square_size_px,current_selected[i][1])+j;// *(_square_size_px + SQUARE_SEPARATOR)+200;
+                x1 = DotToCoordinate(0, board_size_px, _square_size_px,current_selected[i][0])+j;
+                y1 = DotToCoordinate(1, board_size_px, _square_size_px,current_selected[i][1])+j;
                 x2 = DotToCoordinate(0, board_size_px, _square_size_px,current_selected[i+1][0])+j;
                 y2 = DotToCoordinate(1, board_size_px, _square_size_px,current_selected[i+1][1])+j;
-                //    printf("%d %d %d %d pontos\n", x1,y1,x2,y2);
                 clr = current_selected[0][2];
                 SDL_SetRenderDrawColor(_renderer, colors[0][clr], colors[1][clr], colors[2][clr], 255);
                 SDL_RenderDrawLine(_renderer, x1, y1, x2, y2);
@@ -797,38 +806,13 @@ void RenderPath(SDL_Renderer* _renderer, int _num_selected, int current_selected
         }
 }
 
-void RemovePoints(int board_size_px[], int _square_size_px, SDL_Renderer *_renderer,
-            int _num_selected, int current_selected[TABLE_SIZE][3]){
-
-                int circleR,coord_x,coord_y;
-                if (_num_selected==1) return;
-                for ( int i = 0; i < _num_selected; i++ ){
-                    coord_x = DotToCoordinate(0, board_size_px, _square_size_px,current_selected[i][0]);
-                    coord_y = DotToCoordinate(1, board_size_px, _square_size_px,current_selected[i][1]);
-                    circleR = (int)(_square_size_px*0.4f);
-                    // 205, 193, 181 color of the square
-                    filledCircleRGBA(_renderer, coord_x, coord_y, circleR, 205, 193, 181);
-                }
-}
-
+/**
+ * paINTS dots over the colored ones to simulate a less artificial move
+ * DotToCoordinate function, under explained, its crucial
+ */
 void HidePointsToBeRemoved (int board_size_px[], int _square_size_px, SDL_Renderer *_renderer,int board[][MAX_BOARD_POS], int _board_pos_x,
                             int _board_pos_y, int current_selected[TABLE_SIZE][3], int state){
     int circleR,coord_x,coord_y,clr;
-
-    if (state==2){
-            for(int j=0;j<_board_pos_x;j++){
-                for(int k=_board_pos_y-1; k>=0;k--){
-                    if(board[j][k]<0){
-                        coord_x = DotToCoordinate(0, board_size_px, _square_size_px,j);
-                        coord_y = DotToCoordinate(1, board_size_px, _square_size_px,k);
-                        circleR = (int)(_square_size_px*0.4f);
-                        // 205, 193, 181 color of the square
-                        filledCircleRGBA(_renderer, coord_x, coord_y, circleR, 205, 193, 181);
-                    }
-                }
-            }
-            return;
-    }
 
     for(int j=0;j<_board_pos_x;j++){
         for(int k=_board_pos_y-1; k>=0;k--){
@@ -836,10 +820,7 @@ void HidePointsToBeRemoved (int board_size_px[], int _square_size_px, SDL_Render
                 coord_x = DotToCoordinate(0, board_size_px, _square_size_px,j);
                 coord_y = DotToCoordinate(1, board_size_px, _square_size_px,k);
                 circleR = (int)(_square_size_px*0.4f);
-
                 clr=current_selected[0][2];
-                // 205, 193, 181 color of the square
-
                 if ((board[j][k])==-2) filledCircleRGBA(_renderer, coord_x, coord_y, circleR*1.5, colors[0][clr], colors[1][clr], colors[2][clr]);
                 filledCircleRGBA(_renderer, coord_x, coord_y, circleR, 205, 193, 181);
                 if ((board[j][k])==-3) filledCircleRGBA(_renderer, coord_x, coord_y, circleR, 249, 166, 2);
@@ -849,6 +830,13 @@ void HidePointsToBeRemoved (int board_size_px[], int _square_size_px, SDL_Render
 
 }
 
+/**
+ * converts board cells coordinates into window coordinates
+ * usefull in rendering the path of the play, for example
+ * @param  X0Y1            0 if converting X coord., 1 if converting Y coord.
+ * @param  INPUT           cell coordinate
+ * @return                 return the converted value
+ */
 int DotToCoordinate(int  X0Y1,  int board_size_px[], int _square_size_px, int INPUT){
     int x_corner, y_corner, coordinateX, coordinateY;
     if (X0Y1==0) {
@@ -863,43 +851,58 @@ int DotToCoordinate(int  X0Y1,  int board_size_px[], int _square_size_px, int IN
     }
 }
 
+/**
+ * Search the points that are supposed to disapear and set them color to a negative value
+ * other function interpret this values and before removing them show the place they used
+ * to ocupy blank or in another color or board_size
+ * -1 = simple dots to be deleted
+ * -2 = dots that close the square
+ * -3 (RadialDotCheck is the responsible for this) = dots inside the square
+ */
 void SinalizePointsToBeDeleted(int board[][MAX_BOARD_POS], int current_selected[TABLE_SIZE][3], int _num_selected, int _board_pos_x,
-                                int _board_pos_y, int flag_square, int game_stats[6]){
-    int marker=-1;
-
+                                int _board_pos_y, int flag_square, int game_goals[6]){
     if (_num_selected==1) return;
 
-    game_stats[current_selected[0][2]]-=_num_selected;
+    int marker=-1;//selected dots color is replaced by -1 in board vector
+
+    game_goals[current_selected[0][2]]-=_num_selected;//decrement goals of the color selected by the number of dots connected
 
     for(int i=0; i<_num_selected;i++){
 
-        if(i>=current_selected[CROSSING_POINT][0]&&flag_square==1) marker=-2;
+        if(i>=current_selected[CROSSING_POINT][0]&&flag_square==1) marker=-2; //-2 identifies a dot as a member of the 'square'
 
         board[current_selected[i][0]][current_selected[i][1]]=marker;
     }
 
+    //if a square is closed aditonal tasks are performed:
     if(flag_square==1){
-        //caso haja um quadrado o ponto de cruzamento esta selecionado duas vezes
-        game_stats[current_selected[0][2]]--;
-
-        for(int j=0;j<_board_pos_x;j++){
-            for(int k=_board_pos_y; k>=0;k--){
-                if(board[j][k]==current_selected[0][2]){
-
-                    board[j][k]=-1;
-                    game_stats[current_selected[0][2]]--;
-                }
+    //if there is a 'square' the crossing point of the path is recorded twice in the array current_selected. this motivates the increment
+    game_goals[current_selected[0][2]]++;
+    // looks after all the dots of the same color to set them to -1 too
+    for(int j=0;j<_board_pos_x;j++){
+        for(int k=_board_pos_y; k>=0;k--){
+            if(board[j][k]==current_selected[0][2]){
+                board[j][k]=-1;
+                game_goals[current_selected[0][2]]--;
             }
         }
-    if (_num_selected>4)    RadialDotCheck(board, _board_pos_x,_board_pos_y, current_selected, game_stats);
+    }
+    // if a 2x2 square is closed there is no point in checking for anything inside
+    if (_num_selected>4)    RadialDotCheck(board, _board_pos_x,_board_pos_y, current_selected, game_goals);
     }
 
 }
 
-void MovePoints(int board[][MAX_BOARD_POS], int current_selected[TABLE_SIZE][3], int _num_selected, int _board_pos_x, int _board_pos_y, int flag_square){
+/**
+ * drags the upper dots down to fill eventual blank spaces
+ * it iterates each column a time, from bottom to up, and as soon
+ * as it detects a blank brings the nearest dot to is place.
+ * recognize them as their board[][] cells are set to a negative number
+ */
+void MovePoints(int board[][MAX_BOARD_POS], int current_selected[TABLE_SIZE][3], int _num_selected, int _board_pos_x, int _board_pos_y){
     int l=0;
 
-    if (_num_selected==1) return; //se só houver um número
+    if (_num_selected==1) return; //redudant check to prevent malfunctioning
 
     for(int j=0;j<_board_pos_x;j++){
         for(int k=_board_pos_y-1; k>=0;k--){
@@ -918,11 +921,14 @@ void MovePoints(int board[][MAX_BOARD_POS], int current_selected[TABLE_SIZE][3],
         }
     }
 
-    //após sevir o seu propósito reinicia-se para um valor grande o suficiente para nao afetar futuras jogadas
+    //after serving its purpose it's set to a value big enough to prevent it from interfering
     current_selected[CROSSING_POINT][0]=1000;
 
 }
 
+/**
+ * randomizes a number whitin the range of colors choosen by the player to
+ */
 void FreshNewPoints(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos_y, int ncolors){
     srand(time(NULL));
     for(int i=0; i<_board_pos_x;i++){
@@ -932,6 +938,10 @@ void FreshNewPoints(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos
     }
 }
 
+/**
+ * sets all cells of the array that aren't being used to store the path of the current move,
+ * made by the player, to -1
+ */
 void CleanC_S(int current_selected[][3] , int num_selected){
 
     for(int i=CROSSING_POINT-1;i>num_selected;i--){
@@ -941,7 +951,13 @@ void CleanC_S(int current_selected[][3] , int num_selected){
     }
 }
 
-void RadialDotCheck(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos_y, int current_selected[TABLE_SIZE][3], int game_stats[6]){
+/**
+ * iterates over all board dots to understand if they are inside a squares
+ * this is done by trying to get to the limits of the table (in every possible direction) without being stoped by a dot of the 'square'
+ * also in this function the number of dots to eliminate is decremented
+ * if the dot is inside the square it is set to -3 in board[][]
+ */
+void RadialDotCheck(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos_y, int current_selected[TABLE_SIZE][3], int game_goals[6]){
     int x1, y1, x0, y0, direcao=0;
 
     for(int i=1; i<_board_pos_x-1;i++){
@@ -986,7 +1002,7 @@ void RadialDotCheck(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos
                             break;
                         case 8:
                             //inc. the counter of the dot color if it isn't already counted(the dots with the same color of the square)
-                            if(board[i][j]!=current_selected[0][2]) game_stats[board[i][j]]++;
+                            if(board[i][j]!=current_selected[0][2]) game_goals[board[i][j]]++;
                             board[i][j]=-3;
                             break;
                         default:
@@ -1006,20 +1022,33 @@ void RadialDotCheck(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos
                             y0=y1;
                         }
                     }
-
             }
     }
 }
 
-void SetGameStats(int game_stats[6], int game_targets[6]){
+/**
+ * Clone the parametres introduced by the user so it can decrement them without loosing the originals for later use
+ */
+void SetGameGoals(int game_goals[6], int user_goals[6]){
     for(int i=0; i<6; i++){
-        game_stats[i]=game_targets[i];
+        game_goals[i]=user_goals[i];
     }
 }
 
-void RenderStats( SDL_Renderer* _renderer, TTF_Font *_font1, int _game_stats[], int _ncolors, int _moves, char convToDisplay[], int state,
-                    int current_selected[TABLE_SIZE][3],
-                    int num_selected, int flag_square){
+/**
+ * Renders the rectangles, the dots and the values of plays left and targets to achive
+ * The size of the dot of the color selected grow when selecting more and more dots
+ * @param _font1        sans
+ * @param _game_goals   values to be printed
+ * @param _ncolors      to know THE NUMBER OF RECTS TO render
+ * @param convToDisplay char vector to save converted INTs in order of printing them with the "RenderText" function
+ * @param state  for further improvements in animations
+ * @param current_selected[1][2]  to know wich color is selected
+ * @param num_selected  to allow the proportional grow of the dot
+ * @param flag_square   to make dot even bigger in case of a square
+ */
+void RenderStats( SDL_Renderer* _renderer, TTF_Font *_font1, int _game_goals[], int _ncolors, char convToDisplay[], int state,
+                    int current_selected[TABLE_SIZE][3], int num_selected, int flag_square){
     SDL_Color black={0,0,0};
     SDL_Rect stats_boxes;
 
@@ -1028,7 +1057,7 @@ void RenderStats( SDL_Renderer* _renderer, TTF_Font *_font1, int _game_stats[], 
     stats_boxes.w=100;
     stats_boxes.h=61;
 
-    int dotsize;
+    int dotsize; // to increase the dot in proportion to the number of selected (huge if a move is closed)
 
     for(int i=0; i<=_ncolors;i++){
 
@@ -1038,13 +1067,13 @@ void RenderStats( SDL_Renderer* _renderer, TTF_Font *_font1, int _game_stats[], 
         SDL_RenderFillRect(_renderer, &stats_boxes);
 
         if (i==0){
-            sprintf(convToDisplay, "%d", _game_stats[5]);
+            sprintf(convToDisplay, "%d", _game_goals[5]);
             RenderText(stats_boxes.x+25, stats_boxes.y+10 , convToDisplay, _font1, &black, _renderer);
         }
 
         if (i>0) {
-            sprintf(convToDisplay, "%d", _game_stats[i-1]);
-            if (_game_stats[i-1]<0) sprintf(convToDisplay, "%d", 0);
+            sprintf(convToDisplay, "%d", _game_goals[i-1]);
+            if (_game_goals[i-1]<0) sprintf(convToDisplay, "%d", 0);
             RenderText(stats_boxes.x+65, stats_boxes.y+10 , convToDisplay, _font1, &black, _renderer);
             filledCircleRGBA(_renderer, stats_boxes.x+30, stats_boxes.y+30, 26, colors[0][i-1], colors[1][i-1], colors[2][i-1]);
             if(current_selected[1][2]==i-1){
@@ -1060,7 +1089,12 @@ void RenderStats( SDL_Renderer* _renderer, TTF_Font *_font1, int _game_stats[], 
     }
 }
 
-
+/**
+ * Checks if the board ran out of posible _moves
+ * "IFs" to avoid checking positions outside the board
+ * @param  [name]      [description]
+ * @return            1 - out of moves, 0 - at least one move posible
+ */
 int RunOutOfPlays(int board[][MAX_BOARD_POS], int board_pos_x, int board_pos_y){
     for(int i=0; i<board_pos_x; i++){
         for(int j=0; j<board_pos_y;j++){
@@ -1083,6 +1117,10 @@ int RunOutOfPlays(int board[][MAX_BOARD_POS], int board_pos_x, int board_pos_y){
     return 1;
 }
 
+/**
+ * Acordingly with the state in wich the game is renders mensages over the board to help the user (check states description in main)
+ * @param _font1    sans
+ */
 void InfoDisplayer(int state, SDL_Renderer* _renderer, TTF_Font *_font1){
 
     SDL_Rect translucid_background;
@@ -1127,14 +1165,18 @@ void InfoDisplayer(int state, SDL_Renderer* _renderer, TTF_Font *_font1){
     }
 }
 
-void VictoryOrDefeat(int game_stats[6], int game_targets[6],int *state, int ncolors){
+/**
+ * by analise of the stats displayed in the window indentifies victory/defeat. to get that information back
+ * to main it sets the state to the specified values (check states description in main)
+ */
+void VictoryOrDefeat(int game_goals[6], int user_goals[6],int *state, int ncolors){
     int vict_flag=0, defeat_flag=0;
 
     for(int i=0; i<ncolors; i++){
-        if (game_stats[i]>0) break;
+        if (game_goals[i]>0) break;
         if (i==ncolors-1) vict_flag=1;
     }
-    if (game_stats[5]<1){
+    if (game_goals[5]<1){
         defeat_flag=1;
     }
 
@@ -1148,8 +1190,10 @@ void VictoryOrDefeat(int game_stats[6], int game_targets[6],int *state, int ncol
     else ;
 }
 
-
-void CloneForUndo(int board[][MAX_BOARD_POS],int  undo_board[][MAX_BOARD_POS], int game_stats[6], int undo_game_stats[6], int board_pos_x, int board_pos_y, int ncolors){
+/**
+ * records the color matrix and current game statistics in clone arrays so it can be recovered in case of undo
+ */
+void CloneForUndo(int board[][MAX_BOARD_POS],int  undo_board[][MAX_BOARD_POS], int game_goals[6], int undo_game_goals[6], int board_pos_x, int board_pos_y, int ncolors){
 
     for(int i=0; i<board_pos_x; i++){
         for(int j=0; j<board_pos_y;j++){
@@ -1158,15 +1202,17 @@ void CloneForUndo(int board[][MAX_BOARD_POS],int  undo_board[][MAX_BOARD_POS], i
     }
 
     for(int k=0; k<ncolors; k++){
-        undo_game_stats[k]=game_stats[k];
+        undo_game_goals[k]=game_goals[k];
     }
 
-    undo_game_stats[5]=game_stats[5];
+    undo_game_goals[5]=game_goals[5];
 
 }
 
-
-void Undo(int board[][MAX_BOARD_POS],int  undo_board[][MAX_BOARD_POS], int game_stats[6], int undo_game_stats[6], int board_pos_x, int board_pos_y, int ncolors){
+/**
+ * paste the values of the clones above mencioned and created in the arrays of the game itself to perform the undo
+ */
+void Undo(int board[][MAX_BOARD_POS],int  undo_board[][MAX_BOARD_POS], int game_goals[6], int undo_game_goals[6], int board_pos_x, int board_pos_y, int ncolors){
 
     for(int i=0; i<board_pos_x; i++){
         for(int j=0; j<board_pos_y;j++){
@@ -1175,47 +1221,35 @@ void Undo(int board[][MAX_BOARD_POS],int  undo_board[][MAX_BOARD_POS], int game_
     }
 
     for(int k=0; k<ncolors; k++){
-        game_stats[k]=undo_game_stats[k];
+        game_goals[k]=undo_game_goals[k];
     }
 
-    game_stats[5]=undo_game_stats[5];
+    game_goals[5]=undo_game_goals[5];
 
 }
 
+/**
+ * Creates .txt (or add lines if already created) with player name and statistics
+ * @param player_name
+ * @param games_counter    vector with [0] - number of games, [1] - num. of victories and [2] - num. of defeats
+ * @param stats_vect       vector with the number of moves done to win (or -1 in case of a defeat)
+ */
 void statsTXT(char player_name[BUFFER_SIZE], int games_counter[3], int stats_vect[TABLE_SIZE]){
     FILE *statsfile = fopen("stats.txt", "a");
 
-    if (statsfile
-         == NULL)
+    if (statsfile== NULL)
         {
             printf("Error opening file!\n");
             exit(1);
         }
 
-/* print some text
-const char *text = "Write this to the file";
-fprintf(f, "Some text: %s\n", text);
+        fprintf(statsfile, "Jogador: %s\n", player_name);
+        fprintf(statsfile, "Nº de jogos: %d (%d vitórias e %d derrotas)\n", games_counter[0], games_counter[1], games_counter[2]);
 
-print integers and floats
-int i = 1;
-float py = 3.1415927;
-fprintf(f, "Integer: %d, float: %f\n", i, py);
+        for(int i=0; i<games_counter[0]; i++){
+            if (stats_vect[i]>-1) fprintf(statsfile, "%d V\n", stats_vect[i]);
+            else fprintf(statsfile, "D\n");
+        }
 
- printing single chatacters */
-
-
-fprintf(statsfile, "Jogador: %s\n", player_name);
-fprintf(statsfile, "Nº de jogos: %d (%d vitórias e %d derrotas)\n", games_counter[0], games_counter[1], games_counter[2]);
-
-for(int i=0; i<games_counter[0]; i++){
-    if (stats_vect[i]>-1) fprintf(statsfile, "%d V\n", stats_vect[i]);
-    else fprintf(statsfile, "D\n");
-}
-
-fclose(statsfile);
-
-
-
-
-
+        fclose(statsfile);
 }
