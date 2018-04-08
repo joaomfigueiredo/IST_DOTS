@@ -128,6 +128,10 @@ int main( void ){
         // while there's events to handle
         while( SDL_PollEvent( &event ) ){
             if( event.type == SDL_QUIT ){
+                if (state==WAITING_PLAYING){//exit during game count as defeat
+                    games_counter[2]++;
+                    stats_vect[games_counter[0]-1]=-1;
+                }
                 statsTXT(player_name, games_counter, stats_vect);//records stats right before exit
                 quit=1;
             }
@@ -141,6 +145,10 @@ int main( void ){
                         games_counter[0]++;
                         break;
                     case SDLK_q:
+                        if (state==WAITING_PLAYING){//exit during game count as defeat
+                            games_counter[2]++;
+                            stats_vect[games_counter[0]-1]=-1;
+                        }
                         statsTXT(player_name, games_counter, stats_vect);//records stats right before exit
                         quit=1;
                     case SDLK_u:
@@ -1135,7 +1143,7 @@ void InfoDisplayer(int state, SDL_Renderer* _renderer, TTF_Font *_font1){
         SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor( _renderer, 240, 240 , 240, 180 );
         SDL_RenderFillRect(_renderer, &translucid_background);
-        RenderText(translucid_background.x+40, translucid_background.y+130 , "CLIQUE 'N' PARA COMEÇAR", _font1, &black, _renderer);
+        RenderText(translucid_background.x+40, translucid_background.y+130 , "CLIQUE 'N' PARA COMECAR", _font1, &black, _renderer);
 
     }
 
@@ -1247,6 +1255,7 @@ void statsTXT(char player_name[BUFFER_SIZE], int games_counter[3], int stats_vec
         fprintf(statsfile, "Nº de jogos: %d (%d vitórias e %d derrotas)\n", games_counter[0], games_counter[1], games_counter[2]);
 
         for(int i=0; i<games_counter[0]; i++){
+            printf("%d", i);
             if (stats_vect[i]>-1) fprintf(statsfile, "%d V\n", stats_vect[i]);
             else fprintf(statsfile, "D\n");
         }
