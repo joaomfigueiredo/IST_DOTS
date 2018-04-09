@@ -97,7 +97,7 @@ int main( void ){
     TTF_Font *sans = NULL ;
     SDL_Surface *imgs[2];
     SDL_Event event;
-    int delay = 30;
+    int delay = 300;
     int quit = 0;
     int width = (TABLE_SIZE + LEFT_BAR_SIZE);
     int height = TABLE_SIZE;
@@ -153,7 +153,7 @@ int main( void ){
                         quit=1;
                     case SDLK_u:
                         //if in game, undo!
-                        if (state==WAITING_PLAYING) Undo(board, undo_board, game_goals, undo_game_goals, board_pos_x, board_pos_y, ncolors);
+                        if ((state==WAITING_PLAYING)&&(game_goals[5]<user_goals[5])) Undo(board, undo_board, game_goals, undo_game_goals, board_pos_x, board_pos_y, ncolors);
                     default:
                         break;
                 }
@@ -163,16 +163,15 @@ int main( void ){
                 ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y, board_pos_x, board_pos_y);
                 if (state==WAITING_PLAYING){
                     pressed=1;
-                    //clones for UNDO right before the start of a new play
-                    CloneForUndo(board, undo_board, game_goals, undo_game_goals, board_pos_x, board_pos_y, ncolors);
                     CurrentMove(pt_x, pt_y,current_selected,board,&num_selected, &flag_square);
                 }
             }
 
             else if ( event.type == SDL_MOUSEBUTTONUP ){
                 ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y, board_pos_x, board_pos_y);
-                if (state==WAITING_PLAYING) state=DELETING_DOTS;
-                pressed=0;
+                if ((state==WAITING_PLAYING) && (num_selected>1)) state=DELETING_DOTS;
+		if (num_selected==1) num_selected=0;
+		pressed=0;
             }
 
             else if ( event.type == SDL_MOUSEMOTION ){
@@ -189,22 +188,25 @@ int main( void ){
         if (state==GENERATING_DOTS){
             //as state==2 this function paint the spaces left blank after the descent of the points
             HidePointsToBeRemoved(board_size_px, square_size_px, renderer,board, board_pos_x, board_pos_y, current_selected, state);
+           //  SDL_Delay(500);//to smooth visual understanding
             //fills with a color number the negative cells of the matrix
             FreshNewPoints(board, board_pos_x,board_pos_y, ncolors);
-            SDL_Delay(500);//to smooth visual understanding
+            if (num_selected>1) game_goals[5]--;
             state=WAITING_PLAYING;
             num_selected=0;
         }
 
         if (state==DELETING_DOTS) {
-            //Set points selected to -1. if a square is made sets the points of the square to -2, those inside to -3, and all others of the same color to -1
+	    //clones for UNDO right before start to redo de matrix
+            CloneForUndo(board, undo_board, game_goals, undo_game_goals, board_pos_x, board_pos_y, ncolors);
+	    //Set points selected to -1. if a square is made sets the points of the square to -2, those inside to -3, and all others of the same color to -1
             SinalizePointsToBeDeleted(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square, game_goals);
             //paints the dots about to be removed with the background color
             HidePointsToBeRemoved(board_size_px, square_size_px, renderer,board, board_pos_x, board_pos_y, current_selected, state);
             //simulates gravity
             MovePoints(board, current_selected, num_selected, board_pos_x, board_pos_y);
             state=GENERATING_DOTS;
-            SDL_Delay(500);//to smooth visual understanding
+            //SDL_Delay(500);//to smooth visual understanding
         }
         //renders path in WAITING_PLAYING and DELETING_DOTS states
         if (state<2){
@@ -1151,7 +1153,7 @@ void InfoDisplayer(int state, SDL_Renderer* _renderer, TTF_Font *_font1){
         SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor( _renderer, 240, 240 , 240, 180 );
         SDL_RenderFillRect(_renderer, &translucid_background);
-        RenderText(translucid_background.x+130, translucid_background.y+115 , "GANHASTE!", _font1, &black, _renderer);
+        RenderText(translucid_background.x+145, translucid_background.y+115 , "GANHASTE!", _font1, &black, _renderer);
         RenderText(translucid_background.x+25, translucid_background.y+150 , "CLIQUE 'N' PARA UM NOVO JOGO", _font1, &black, _renderer);
     }
 
@@ -1159,7 +1161,7 @@ void InfoDisplayer(int state, SDL_Renderer* _renderer, TTF_Font *_font1){
         SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor( _renderer, 240, 240 , 240, 180 );
         SDL_RenderFillRect(_renderer, &translucid_background);
-        RenderText(translucid_background.x+130, translucid_background.y+115 , "PERDESTE!", _font1, &black, _renderer);
+        RenderText(translucid_background.x+145, translucid_background.y+115 , "PERDESTE!", _font1, &black, _renderer);
         RenderText(translucid_background.x+25, translucid_background.y+150 , "CLIQUE 'N' PARA UM NOVO JOGO", _font1, &black, _renderer);
     }
 
@@ -1255,7 +1257,6 @@ void statsTXT(char player_name[BUFFER_SIZE], int games_counter[3], int stats_vec
         fprintf(statsfile, "Nº de jogos: %d (%d vitórias e %d derrotas)\n", games_counter[0], games_counter[1], games_counter[2]);
 
         for(int i=0; i<games_counter[0]; i++){
-            printf("%d", i);
             if (stats_vect[i]>-1) fprintf(statsfile, "%d V\n", stats_vect[i]);
             else fprintf(statsfile, "D\n");
         }
