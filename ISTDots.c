@@ -139,6 +139,10 @@ int main( void ){
             else if ( event.type == SDL_KEYDOWN ){
                 switch ( event.key.keysym.sym ){
                     case SDLK_n:
+                        if (state==WAITING_PLAYING){//new game during game count as defeat
+                            games_counter[2]++;
+                            stats_vect[games_counter[0]-1]=-1;
+                        }
                         InitialBoard(board, board_pos_x, board_pos_y, ncolors);//renders new colors
                         SetGameGoals(game_goals, user_goals);
                         state=WAITING_PLAYING;//ready to play
