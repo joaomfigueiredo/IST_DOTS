@@ -74,6 +74,7 @@ void VictoryOrDefeat(int[], int[], int *, int);
 void statsTXT(char [BUFFER_SIZE], int games_counter[3], int stats_vect[TABLE_SIZE]);
 void HidePointsToBeRemoved(int [], int, SDL_Renderer *,int [][MAX_BOARD_POS], int, int, int [TABLE_SIZE][3], int);
 void RenderPath(SDL_Renderer *, int, int[TABLE_SIZE][3],int, int []);
+void Shuffle(int [][MAX_BOARD_POS], int, int);
 
 //advanced feature
 void Undo(int [][MAX_BOARD_POS],int  [][MAX_BOARD_POS], int[6], int [6], int, int, int);
@@ -125,6 +126,10 @@ int main( void ){
 
     while( quit == 0 )
     {
+        if (state==NOMORE_MOVES){
+                Shuffle(board, board_pos_x,board_pos_y);
+                state=WAITING_PLAYING;
+        }
         // while there's events to handle
         while( SDL_PollEvent( &event ) ){
             if( event.type == SDL_QUIT ){
@@ -142,7 +147,7 @@ int main( void ){
                         if (state==WAITING_PLAYING){//new game during game count as defeat
                             games_counter[2]++;
                             stats_vect[games_counter[0]-1]=-1;
-                        }
+                    }
                         InitialBoard(board, board_pos_x, board_pos_y, ncolors);//renders new colors
                         SetGameGoals(game_goals, user_goals);
                         state=WAITING_PLAYING;//ready to play
@@ -158,6 +163,8 @@ int main( void ){
                     case SDLK_u:
                         //if in game, undo!
                         if ((state==WAITING_PLAYING)&&(game_goals[5]<user_goals[5])) Undo(board, undo_board, game_goals, undo_game_goals, board_pos_x, board_pos_y, ncolors);
+                    case SDLK_s:
+                        board[pt_x][pt_y]=0;
                     default:
                         break;
                 }
@@ -227,8 +234,8 @@ int main( void ){
                 games_counter[1]++;
                 stats_vect[games_counter[0]-1]=user_goals[5]-game_goals[5];
             }
-            //LOST OR NOMORE_MOVES
-            if (state>3){
+            //LOst
+            if (state==LOST){
                 games_counter[2]++;
                 stats_vect[games_counter[0]-1]=-1;
             }
@@ -1145,7 +1152,7 @@ void InfoDisplayer(int state, SDL_Renderer* _renderer, TTF_Font *_font1){
     translucid_background.w=500;
     translucid_background.h=307;
 
-    if (state==-1){
+    if (state==BEFORESTARTN){
         SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor( _renderer, 240, 240 , 240, 180 );
         SDL_RenderFillRect(_renderer, &translucid_background);
@@ -1153,7 +1160,7 @@ void InfoDisplayer(int state, SDL_Renderer* _renderer, TTF_Font *_font1){
 
     }
 
-    if(state==3){
+    if(state==WON){
         SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor( _renderer, 240, 240 , 240, 180 );
         SDL_RenderFillRect(_renderer, &translucid_background);
@@ -1161,7 +1168,7 @@ void InfoDisplayer(int state, SDL_Renderer* _renderer, TTF_Font *_font1){
         RenderText(translucid_background.x+25, translucid_background.y+150 , "CLIQUE 'N' PARA UM NOVO JOGO", _font1, &black, _renderer);
     }
 
-    if(state==4){
+    if(state==LOST){
         SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor( _renderer, 240, 240 , 240, 180 );
         SDL_RenderFillRect(_renderer, &translucid_background);
@@ -1169,12 +1176,12 @@ void InfoDisplayer(int state, SDL_Renderer* _renderer, TTF_Font *_font1){
         RenderText(translucid_background.x+25, translucid_background.y+150 , "CLIQUE 'N' PARA UM NOVO JOGO", _font1, &black, _renderer);
     }
 
-    if (state==5){
+    if (state==NOMORE_MOVES){
         SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor( _renderer, 240, 240 , 240, 180 );
         SDL_RenderFillRect(_renderer, &translucid_background);
         RenderText(translucid_background.x+25, translucid_background.y+115 , "ESGOTOU AS JOGADAS POSSIVEIS", _font1, &black, _renderer);
-        RenderText(translucid_background.x+25, translucid_background.y+150 , "CLIQUE 'N' PARA UM NOVO JOGO", _font1, &black, _renderer);
+        RenderText(translucid_background.x+145, translucid_background.y+150 , "SHUFFLE!!", _font1, &black, _renderer);
 
     }
 }
@@ -1249,7 +1256,7 @@ void Undo(int board[][MAX_BOARD_POS],int  undo_board[][MAX_BOARD_POS], int game_
  * @param stats_vect       vector with the number of moves done to win (or -1 in case of a defeat)
  */
 void statsTXT(char player_name[BUFFER_SIZE], int games_counter[3], int stats_vect[TABLE_SIZE]){
-    FILE *statsfile = fopen("stats.txt", "a");
+    FILE *statsfile = fopen("stats.txt", "w");
 
     if (statsfile== NULL)
         {
@@ -1266,4 +1273,23 @@ void statsTXT(char player_name[BUFFER_SIZE], int games_counter[3], int stats_vec
         }
 
         fclose(statsfile);
+}
+
+
+
+void Shuffle(int board[][MAX_BOARD_POS], int board_pos_x, int board_pos_y){
+    srand(time(NULL));
+    int clr_aux=0, x0=0, y0=0, x1=0, y1=0;
+
+    for(int i=0; i<(board_pos_x*board_pos_y); i++){
+        x0=rand()%board_pos_x;
+        y0=rand()%board_pos_y;
+        x1=rand()%board_pos_x;
+        y1=rand()%board_pos_y;
+
+        clr_aux=board[x0][y0];
+        board[x0][y0]=board[x1][y1];
+        board[x1][y1]=clr_aux;
+
+    }
 }
