@@ -63,7 +63,7 @@ void CurrentMove(int, int,int[TABLE_SIZE][3],int[][MAX_BOARD_POS], int *, int *)
 int  YNconnect(int*, int[TABLE_SIZE][3],int[][MAX_BOARD_POS], int, int, int*);
 int DotToCoordinate(int,  int [], int, int);
 void MovePoints(int [][MAX_BOARD_POS], int [TABLE_SIZE][3], int , int , int);
-void FreshNewPoints(int [][MAX_BOARD_POS], int , int,int);
+void FreshNewPoints(int [][MAX_BOARD_POS], int , int,  int, int, int [TABLE_SIZE][3]);
 void CleanC_S(int[][3], int);
 void SinalizePointsToBeDeleted(int [][MAX_BOARD_POS], int [TABLE_SIZE][3], int , int, int, int, int[6] );
 void RadialDotCheck(int [][MAX_BOARD_POS], int, int, int [TABLE_SIZE][3], int[6]);
@@ -117,6 +117,7 @@ int main( void ){
     char convToDisplay[3]; //auxiliar var. used in RenderStats
     int games_counter[3]={0}, stats_vect[TABLE_SIZE]={0};//(in order) [0]-nº of games;[1]-nº of victories; [2]-nº of defeats
     int undo_board[MAX_BOARD_POS][MAX_BOARD_POS]={{0}}, undo_game_goals[6]={0}; //clones of current values to perform undo of a play
+    srand(1234);//initialize srand with the given seed
     // initialize graphics
     ParamReading(&board_pos_x, &board_pos_y, player_name ,&ncolors, user_goals);
     InitialBoard(board, board_pos_x, board_pos_y, ncolors);
@@ -126,7 +127,9 @@ int main( void ){
 
     while( quit == 0 )
     {
+        //if the user ran out of posible moves the board shuffles
         if (state==NOMORE_MOVES){
+                SDL_Delay(1500);
                 Shuffle(board, board_pos_x,board_pos_y);
                 state=WAITING_PLAYING;
         }
@@ -181,8 +184,12 @@ int main( void ){
             else if ( event.type == SDL_MOUSEBUTTONUP ){
                 ProcessMouseEvent(event.button.x, event.button.y, board_size_px, square_size_px, &pt_x, &pt_y, board_pos_x, board_pos_y);
                 if ((state==WAITING_PLAYING) && (num_selected>1)) state=DELETING_DOTS;
-		if (num_selected==1) num_selected=0;
-		pressed=0;
+		        if (num_selected==1) num_selected=0;
+		        pressed=0;
+                //disable square powerup
+                if ((ncolors==1)&&(flag_square==1)){
+                    flag_square=0;
+                }
             }
 
             else if ( event.type == SDL_MOUSEMOTION ){
@@ -201,14 +208,14 @@ int main( void ){
             HidePointsToBeRemoved(board_size_px, square_size_px, renderer,board, board_pos_x, board_pos_y, current_selected, state);
            //  SDL_Delay(500);//to smooth visual understanding
             //fills with a color number the negative cells of the matrix
-            FreshNewPoints(board, board_pos_x,board_pos_y, ncolors);
+            FreshNewPoints(board, board_pos_x,board_pos_y, ncolors, flag_square, current_selected);
             if (num_selected>1) game_goals[5]--;
             state=WAITING_PLAYING;
             num_selected=0;
         }
 
         if (state==DELETING_DOTS) {
-	    //clones for UNDO right before start to redo de matrix
+        //clones for UNDO right before start to redo de matrix
             CloneForUndo(board, undo_board, game_goals, undo_game_goals, board_pos_x, board_pos_y, ncolors);
 	    //Set points selected to -1. if a square is made sets the points of the square to -2, those inside to -3, and all others of the same color to -1
             SinalizePointsToBeDeleted(board, current_selected, num_selected, board_pos_x, board_pos_y,flag_square, game_goals);
@@ -240,7 +247,7 @@ int main( void ){
                 stats_vect[games_counter[0]-1]=-1;
             }
         }
-        //display info messanges in the board
+        //display info messanges in the board (victory, lost, shuffle)
         InfoDisplayer(state, renderer, sans);
         //prints the stats in the top of the window
         RenderStats(renderer, sans, game_goals, ncolors, convToDisplay, state, current_selected, num_selected, flag_square);
@@ -690,6 +697,7 @@ void ParamReading(int *_board_pos_x, int *_board_pos_y, char player_name[] ,int 
             if((sscanf(buffer," %d", _ncolors)==1)&&(0<*_ncolors&&*_ncolors<6)) break;
         else (printf("Nº de cores entre 1 e 5 (inclusive)\n"));
     }
+    if (*_ncolors==1) printf("AVISO: O 'powerup' dos quadrados está destivado (num. cores<2).\n" );
 
 
     printf("OBJETIVOS:\n");
@@ -733,7 +741,7 @@ void ParamReading(int *_board_pos_x, int *_board_pos_y, char player_name[] ,int 
  * randomizes color numbers to fulfill the entire game matrix
  */
 void InitialBoard(int board[][MAX_BOARD_POS], int board_pos_x, int board_pos_y, int ncolors) {
-    srand(time(NULL));
+
     for ( int i=0; i<board_pos_x;i++){
         for(int j=0; j<board_pos_y;j++){
                 board[i][j]=(rand()%ncolors);
@@ -950,10 +958,18 @@ void MovePoints(int board[][MAX_BOARD_POS], int current_selected[TABLE_SIZE][3],
 /**
  * randomizes a number whitin the range of colors choosen by the player to
  */
-void FreshNewPoints(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos_y, int ncolors){
-    srand(time(NULL));
+void FreshNewPoints(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos_y,
+                    int ncolors, int flag_square, int current_selected[TABLE_SIZE][3]){
+
     for(int i=0; i<_board_pos_x;i++){
         for(int j=0; j<_board_pos_y;j++){
+            //if a square is closed dots of the same color aren't generated in the consequent refill
+            if ((flag_square==1)&&(board[i][j]<0)){
+                do{
+                    board[i][j]=(rand()%ncolors);
+                    printf("%d", current_selected[0][2]);
+                } while (board[i][j]==current_selected[0][2]);
+            }
             if (board[i][j]<0) board[i][j]=(rand()%ncolors);
         }
     }
@@ -1260,7 +1276,7 @@ void statsTXT(char player_name[BUFFER_SIZE], int games_counter[3], int stats_vec
 
     if (statsfile== NULL)
         {
-            printf("Error opening file!\n");
+            printf("Erro ao abrir o ficheiro de estatísticas!\n");
             exit(1);
         }
 
@@ -1275,10 +1291,11 @@ void statsTXT(char player_name[BUFFER_SIZE], int games_counter[3], int stats_vec
         fclose(statsfile);
 }
 
-
-
+/**
+ * Executes switch of color beetween matrix cells,
+ * (board_pos_x*board_pos_y) times as a way of shuffling
+ */
 void Shuffle(int board[][MAX_BOARD_POS], int board_pos_x, int board_pos_y){
-    srand(time(NULL));
     int clr_aux=0, x0=0, y0=0, x1=0, y1=0;
 
     for(int i=0; i<(board_pos_x*board_pos_y); i++){
