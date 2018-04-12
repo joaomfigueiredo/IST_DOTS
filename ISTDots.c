@@ -163,11 +163,11 @@ int main( void ){
                         }
                         statsTXT(player_name, games_counter, stats_vect);//records stats right before exit
                         quit=1;
+                        break;
                     case SDLK_u:
                         //if in game, undo!
                         if ((state==WAITING_PLAYING)&&(game_goals[5]<user_goals[5])) Undo(board, undo_board, game_goals, undo_game_goals, board_pos_x, board_pos_y, ncolors);
-                    case SDLK_s:
-                        board[pt_x][pt_y]=0;
+                        break;
                     default:
                         break;
                 }
@@ -967,7 +967,6 @@ void FreshNewPoints(int board[][MAX_BOARD_POS], int _board_pos_x, int _board_pos
             if ((flag_square==1)&&(board[i][j]<0)){
                 do{
                     board[i][j]=(rand()%ncolors);
-                    printf("%d", current_selected[0][2]);
                 } while (board[i][j]==current_selected[0][2]);
             }
             if (board[i][j]<0) board[i][j]=(rand()%ncolors);
